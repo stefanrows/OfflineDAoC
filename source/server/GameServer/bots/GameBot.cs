@@ -85,6 +85,10 @@ namespace DOL.GS
         public bool IsAutonomousWorldBot { get; private set; }
         public bool IsTemporaryGroupHelper { get; private set; }
         public bool IsPersistentPlayerCompanion => PlayerCompanionRecord != null;
+        /// <summary>RvR world (R3b): the realm-wide relic bonus reaches the realm's player-shaped bots (world
+        /// bots, companions, /spawn helpers) as it reaches its players. Camlann keeps the NPC answer.</summary>
+        public override bool BenefitsFromRelics =>
+            WorldMode.IsRvr && (IsAutonomousWorldBot || IsPersistentPlayerCompanion || IsTemporaryGroupHelper) || base.BenefitsFromRelics;
         internal bool SuppressRosterBenchOnGroupRemoval { get; set; }
         public bool IsEndgameCompanion => TemporaryCompanionBalance.IsEndgame(IsTemporaryGroupHelper, Level);
         private bool _endgameCompanionEquipped;

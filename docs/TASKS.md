@@ -29,6 +29,10 @@ When a task is done and its required verification is complete, move it out of it
      the keep's realm, guards and portal keeps hostile to other realms,
      Darkness Falls for the realm with most keeps; [RVR_KEEPS.md](RVR_KEEPS.md))
      implemented in source, real-client check pending.
+     R3b (relics on realm pads behind the 1.65 milegates, realm-wide upstream
+     bonus, relic-temple guards by realm, bot relic raids by realm;
+     [RVR_RELICS.md](RVR_RELICS.md)) implemented in source, real-client check
+     pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed

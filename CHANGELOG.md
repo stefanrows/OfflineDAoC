@@ -12,6 +12,27 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.338.0] - 2026-10-25
+
+### Added
+- RvR mode, package R3b (`docs/RVR_RELICS.md`): in a `Realm-1` world relics
+  sit on realm temple pads. A realm can take an enemy relic only when the
+  temple's three milegate keeps are in enemy hands, it still holds its own
+  relic of that type and 16 of its fighters stand on the pad; the relic is
+  carried to the own temple pad of the same type. Each enemy relic held gives
+  the whole realm, bots and pets included, +10 % while the own relic is home.
+  Temple guards stand for their realm; relic keeps cannot be captured. Bot
+  armies pick open enemy temples as targets. Unit tests UT_RvrRelics (50).
+
+### Changed
+- None for the Camlann world (guild relic pads and rules unchanged there).
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.337.0] - 2026-10-25
 
 ### Added

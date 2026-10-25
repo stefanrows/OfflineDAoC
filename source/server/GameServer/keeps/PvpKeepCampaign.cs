@@ -48,9 +48,18 @@ namespace DOL.GS.Keeps
             world == WorldModelKind.Realm && portalKeep && !PvpCombatant.IsPlayableRealm(realm) &&
             PvpCombatant.IsPlayableRealm(originalRealm) ? originalRealm : null;
 
+        /// <summary>RvR world (R3b): a relic temple always stands for its original realm. A row of another realm (a
+        /// temple captured under 0.337.0) or of none takes it back at start. Null leaves the keep as it is.</summary>
+        public static eRealm? RelicKeepStartRealm(WorldModelKind world, bool relicKeep, eRealm realm, eRealm originalRealm) =>
+            world == WorldModelKind.Realm && relicKeep && realm != originalRealm &&
+            PvpCombatant.IsPlayableRealm(originalRealm) ? originalRealm : null;
+
         public static void Initialize(AbstractGameKeep keep)
         {
-            if (keep?.DBKeep != null && PortalKeepStartRealm(WorldMode.Current, keep.IsPortalKeep, keep.Realm, keep.OriginalRealm) is eRealm portalRealm)
+            // A relic temple stands for its realm (R3b): it is never captured, and one that flipped under 0.337.0
+            // or lost its realm returns to its original realm at start.
+            if (keep?.DBKeep != null && (PortalKeepStartRealm(WorldMode.Current, keep.IsPortalKeep, keep.Realm, keep.OriginalRealm) ??
+                RelicKeepStartRealm(WorldMode.Current, keep.IsRelic, keep.Realm, keep.OriginalRealm)) is eRealm portalRealm)
             {
                 keep.Realm = portalRealm;
                 keep.SaveIntoDatabase();
@@ -213,6 +222,9 @@ namespace DOL.GS.Keeps
         public static bool CaptureChangesOwner(eRealm keepRealm, bool heldByGarrison, eRealm captor) =>
             PvpCombatant.IsPlayableRealm(captor) && (heldByGarrison || keepRealm != captor);
 
+        /// <summary>RvR world (R3b): a lord kill captures every campaign keep except a relic temple (skin 99).</summary>
+        public static bool RealmCaptureApplies(bool relicKeep) => !relicKeep;
+
         /// <summary>Only a guild of the keep's realm may claim it in the RvR world (owner decision 13): the claimer
         /// fights for the keep's realm and the guild is of that realm (a realm-less guild, as the RvR rules allow,
         /// counts through its member). A realm-less keep is first captured, never claimed.</summary>
@@ -255,12 +267,18 @@ namespace DOL.GS.Keeps
         /// are repaired, doors and banners take the realm, and the guards die and respawn as the realm's guards
         /// (the lord a second later). The keep stands at level 1 without a claim and the Keep Claim Steward waits
         /// for an optional claim by a guild of that realm (<see cref="AbstractGameKeep.DBKeep"/>.LordDefeated
-        /// marks "awaiting a claim" here; the lord still stands so another realm can retake it). Relic keeps
-        /// are never claimed and only change realm. The capture is saved and never returns to the Wardens.
-        /// Returns false, changing nothing, for a realm-less captor or the keep's own realm.
+        /// marks "awaiting a claim" here; the lord still stands so another realm can retake it). The capture is
+        /// saved and never returns to the Wardens. Returns false, changing nothing, for a realm-less captor, the
+        /// keep's own realm, or a relic keep: the six relic temples never change hands (R3b, as the 1.65
+        /// temples), so their pads, gates and temple guards stay their realm's.
         /// </summary>
         public static bool CaptureForRealm(AbstractGameKeep keep, eRealm captor, GameLiving captorLiving)
         {
+            if (!RealmCaptureApplies(keep.IsRelic))
+            {
+                log.Info($"KEEP_REALM_CAPTURE_SKIPPED keep={keep.KeepID} name={keep.Name} realm={keep.Realm} captor={captor} reason=relic_temple");
+                return false;
+            }
             eRealm previous = keep.Realm;
             string previousOwner = keep.Guild?.Name ?? string.Empty;
             if (!CaptureChangesOwner(previous, IsGarrison(keep.Guild), captor))

@@ -91,19 +91,32 @@ namespace DOL.GS
                 return false;
             }
 
-            if (IsMounted)
+            if (WorldMode.IsRvr)
             {
-                if (CurrentRelicPad is GameKeepRelicPad keepPad && ServerRules.PvpCombatant.GuildOf(player) == keepPad.Guild)
+                // RvR world (R3b): enemy realms only, behind an open milegate, upstream own-relic rule.
+                string refusal = RelicMgr.GetRvrPickupRefusal(player, this);
+                if (refusal != null)
                 {
-                    OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. It is mounted in your guild's keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                    OutputOf(player).SendMessage(refusal, eChatType.CT_System, eChatLoc.CL_SystemWindow);
                     return false;
                 }
             }
-
-            if (!RelicMgr.CanPickupRelicFromShrine(player, this))
+            else
             {
-                OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. Your guild must own a keep, and the defending lord or shrine guards must be defeated first.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
-                return false;
+                if (IsMounted)
+                {
+                    if (CurrentRelicPad is GameKeepRelicPad keepPad && ServerRules.PvpCombatant.GuildOf(player) == keepPad.Guild)
+                    {
+                        OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. It is mounted in your guild's keep.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                        return false;
+                    }
+                }
+
+                if (!RelicMgr.CanPickupRelicFromShrine(player, this))
+                {
+                    OutputOf(player).SendMessage($"You cannot pickup {GetName(0, false)}. Your guild must own a keep, and the defending lord or shrine guards must be defeated first.", eChatType.CT_System, eChatLoc.CL_SystemWindow);
+                    return false;
+                }
             }
 
             if (player is not GamePlayer human || (ePrivLevel)human.Client.Account.PrivLevel == ePrivLevel.Player)
@@ -202,10 +215,13 @@ namespace DOL.GS
         public override IList GetExamineMessages(GamePlayer player)
         {
             IList messages = base.GetExamineMessages(player);
-            if (GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules && IsMounted)
+            if (GameServer.ServerRules is DOL.GS.ServerRules.PvPServerRules && !WorldMode.IsRvr && IsMounted)
                 messages.Add($"It is held by {(CurrentRelicPad is GameKeepRelicPad pad ? pad.Guild?.Name ?? "an unclaimed keep" : PvpKeepCampaign.GarrisonName)}.");
             else
                 messages.Add(IsMounted ? $"It is owned by {(player.Realm == Realm ? "your realm" : GlobalConstants.RealmToName(Realm))}." : "It is without owner, take it!");
+            // RvR world (R3b): an enemy sees whether the temple's milegate still stands.
+            if (WorldMode.IsRvr && IsMounted && player.Realm != Realm && CurrentRelicPad is not GameKeepRelicPad)
+                messages.Add(RelicMgr.IsTempleOpen(CurrentRelicPad) ? "Its milegate has fallen; the temple stands open." : "Its milegate still stands.");
             return messages;
         }
 

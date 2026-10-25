@@ -30,7 +30,8 @@ namespace DOL.GS.GameEvents
             // shrines. The stock relic guards take the stale keep realm (often
             // None), spawn as level-66 "Renegade" Jarls/Knights/Sentinels that
             // attack every realm, and chase bots onto the border bind stones.
-            if (!ShouldRun(GameServer.ServerRules is PvPServerRules))
+            // RvR world (R3b): the realm relic temples keep their stock guards, of the temple's realm.
+            if (!ShouldRun(GameServer.ServerRules is PvPServerRules, WorldMode.IsRvr))
             {
                 log.Info("RELIC_GUARDS_DISABLED reason=camlann");
                 return;
@@ -46,6 +47,18 @@ namespace DOL.GS.GameEvents
 
         /// <summary>The stock relic-temple guards run only outside Camlann PvP rules.</summary>
         public static bool ShouldRun(bool camlann) => !camlann;
+
+        /// <summary>Server rules and world together: outside PvP rules as upstream, and in the RvR world (R3b),
+        /// where the relic temples are realm temples again. Camlann (PvP rules, Camlann world) stays off.</summary>
+        public static bool ShouldRun(bool pvpRules, bool rvrWorld) => !pvpRules || rvrWorld;
+
+        /// <summary>
+        /// Whether a relic-temple guard stands. Upstream: while the frontier keep it stands for is held by that
+        /// keep's own realm. RvR world (R3b) also: only while its temple (the relic keep) is its realm's, so a
+        /// realm-less or captured temple never spawns a "Renegade" guard that attacks everyone (bug 146).
+        /// </summary>
+        public static bool GuardStands(bool rvrWorld, eRealm keepRealm, eRealm keepOriginalRealm, eRealm templeRealm, eRealm guardRealm) =>
+            keepRealm == keepOriginalRealm && (!rvrWorld || templeRealm == guardRealm);
 
         [ScriptUnloadedEvent]
         public static void OnScriptUnload(DOLEvent e, object sender, EventArgs args)
@@ -215,6 +228,13 @@ namespace DOL.GS.GameEvents
                 GuardFighterRK guard2 = guardPair.Guard2;
                 string guardName = guardPair.Name;
 
+                // RvR world (R3b): a guard whose temple is not its realm's (realm-less or captured) stays away.
+                if (WorldMode.IsRvr)
+                {
+                    guard1 = RvrTempleGuard(guard1, $"{guardName}(1)", ref addedGuardsCount);
+                    guard2 = RvrTempleGuard(guard2, $"{guardName}(2)", ref addedGuardsCount);
+                }
+
                 if (keep.Realm == keep.OriginalRealm)
                 {
                     if (IsGuardNotInWorld(guard1) && IsGuardNotInWorld(guard2))
@@ -235,6 +255,27 @@ namespace DOL.GS.GameEvents
                 }
 
                 bool IsGuardNotInWorld(GuardFighterRK guard) => guard != null && guard.ObjectState is not GameObject.eObjectState.Active;
+
+                GuardFighterRK RvrTempleGuard(GuardFighterRK guard, string name, ref int count)
+                {
+                    if (guard == null)
+                        return null;
+
+                    eRealm templeRealm = guard.Component?.Keep?.Realm ?? eRealm.None;
+
+                    if (!GuardStands(true, keep.OriginalRealm, keep.OriginalRealm, templeRealm, keep.OriginalRealm))
+                    {
+                        RemoveGuardFromWorld(guard, ref count, name);
+                        return null;
+                    }
+
+                    // The template took the temple's realm when the guard was built; a temple won back since then
+                    // must not leave it realm-less.
+                    if (guard.ObjectState is not GameObject.eObjectState.Active && !guard.IsRespawning && guard.Realm != templeRealm)
+                        GuardTemplateMgr.RefreshTemplate(guard);
+
+                    return guard;
+                }
 
                 void AddGuardToWorld(GuardFighterRK guard, ref int count, int max, string name)
                 {

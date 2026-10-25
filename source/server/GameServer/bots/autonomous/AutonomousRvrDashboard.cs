@@ -92,7 +92,11 @@ public static class AutonomousRvrDashboard
                 GameLiving carrier = relic.CurrentCarrier;
                 long remaining = AutonomousRvrEventLayer.CarrierRemainingMilliseconds(
                     AutonomousRvrEventLayer.RelicCarrierTargetId(relic), GameLoop.GameLoopTime);
-                string relicOwner = carrier != null ? DOL.GS.ServerRules.PvpCombatant.GuildOf(carrier)?.Name ?? carrier.Name
+                // RvR world (R3b): relics belong to realms, shown by the carrier's or the temple's realm.
+                string relicOwner = WorldMode.IsRvr
+                    ? carrier != null ? GlobalConstants.RealmToName(DOL.GS.ServerRules.PvpCombatant.AllianceRealm(carrier))
+                        : relic.IsMounted ? GlobalConstants.RealmToName(relic.Realm) : "In transit"
+                    : carrier != null ? DOL.GS.ServerRules.PvpCombatant.GuildOf(carrier)?.Name ?? carrier.Name
                     : relic.CurrentRelicPad is GameKeepRelicPad pad ? pad.Guild?.Name ?? "Unclaimed"
                     : relic.IsMounted ? PvpKeepCampaign.GarrisonName : "In transit";
                 return new Objective("Relic", relic.Name, relicOwner,

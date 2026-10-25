@@ -1889,10 +1889,8 @@ namespace DOL.GS
             GameRelic carriedRelic = bot.TempProperties.GetProperty<GameRelic>(GameRelic.PLAYER_CARRY_RELIC_WEAK);
             if (carriedRelic?.CurrentCarrier == bot)
             {
-                GameRelicPad home = RelicMgr.GetPadsSnapshot().FirstOrDefault(pad =>
-                    pad is GameKeepRelicPad keepPad && bot.Guild != null && keepPad.Guild == bot.Guild &&
-                    pad.AcceptsRelicType(carriedRelic.RelicType) && pad.MountedRelics.Count < 3 &&
-                    pad.CanReceiveRelic(bot, carriedRelic));
+                // Camlann: the guild's claimed keep; RvR world (R3b): the realm's temple pad of the relic's type.
+                GameRelicPad home = RelicMgr.FindDeliveryPad(bot, bot.Guild, carriedRelic);
                 if (home == null)
                 {
                     SetRvrStatus(bot, "Relic return blocked", "Protect the carried relic", "No matching home shrine is available");
@@ -1904,7 +1902,8 @@ namespace DOL.GS
                     SetRvrStatus(bot, "Relic captured", "Relic delivered to the home shrine", carriedRelic.Name);
                     return true;
                 }
-                SetRvrStatus(bot, "Returning relic", "Escort the relic to your guild keep", home.Name);
+                SetRvrStatus(bot, "Returning relic", WorldMode.IsRvr ? "Escort the relic to your realm's relic temple" :
+                    "Escort the relic to your guild keep", home.Name);
                 return TravelRvrObjective(bot, new("relic-home", home.Name, home.CurrentZone?.Description ?? "home shrine",
                     home.CurrentRegionID, home.X, home.Y, home.Z, 50, false, true));
             }
@@ -1937,7 +1936,8 @@ namespace DOL.GS
                         escorted.TryPickup(bot);
                     }
                     else TravelRvrObjective(bot, _rvrDestination);
-                    SetRvrStatus(bot, "Recovering dropped relic", escorted.Name, "Recovering the dropped relic for the guild");
+                    SetRvrStatus(bot, "Recovering dropped relic", escorted.Name,
+                        WorldMode.IsRvr ? "Recovering the dropped relic for the realm" : "Recovering the dropped relic for the guild");
                     return true;
                 }
                 _rvrDestination = null;
@@ -2784,7 +2784,7 @@ namespace DOL.GS
                     keep.IsRelic ? AutonomousRvrEventLayer.Intent.AssaultRelicKeep : AutonomousRvrEventLayer.Intent.AssaultKeep,
                     keep.Realm, keep.Region, keep.X, keep.Y, keep.Z, keep.IsRelic, 0, 0,
                     keep.Guards.Values.Count(g => g.IsAlive), keep.Doors.Values.Count(d => d.IsAlive && d.State == eDoorState.Closed),
-                    OwningGuild: keep.Guild?.Name, Claimable: AutonomousRvrKeepPolicy.IsClaimableKeep(keep),
+                    OwningGuild: keep.Guild?.Name, Claimable: AutonomousRvrKeepPolicy.IsClaimableKeep(keep) || RelicMgr.IsRelicRaidTarget(keep, bot),
                     AwaitingClaim: PvpKeepCampaign.Applies(keep) && keep.Guild == null && keep.DBKeep.LordDefeated &&
                         PvpKeepCampaign.MayClaimInWorld(keep, bot) &&
                         keep.ClaimPoint?.ObjectState == GameObject.eObjectState.Active));

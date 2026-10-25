@@ -45,8 +45,10 @@ section compares the two.
   their own bracket-scaled objective rewards. The claim pays nothing more.
 - No capture: a realm-less killer (a mob, a neutral encounter bot) or the
   keep's own realm. The lord simply stands again.
-- Relic keeps change realm like any campaign keep but are never claimed and
-  get no steward; relics themselves are R3b.
+- Relic keeps (the six relic temples) never change hands (R3b, as the 1.65
+  temples): a lord kill there captures nothing, and a realm-less relic keep
+  row, or one captured under 0.337.0, takes its original realm back at start. Relics are in
+  [RVR_RELICS.md](RVR_RELICS.md).
 - **Portal keeps never change hands**, as the 1.65 border keeps: a portal-keep
   lord kill only counts the statistic. Other keeps outside the campaign reset
   to the killer's realm as upstream.

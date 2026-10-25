@@ -56,7 +56,14 @@ defaults in code, keep/relic start state from the reset.
   by realm incl. portal keeps; Darkness Falls by keep count (previous owner 15
   min grace); bots never siege own-realm keeps; open BG roles read a real
   lord state. Camlann unchanged. 72 tests.
-- [~] **R3b Relics.** Implemented (worktree rvr-r3b, 42 tests): milegate rule (3 chain keeps in enemy hands + own relic held + 16 enemies on the pad), realm-wide bonus incl. bots, temple guards by realm, no guild pads, bot relic targets; relic keeps excluded from realm capture (owner-side decision 11:40). Fast-forward + review next. Realm pads, realm-wide bonus, relic sieges. 1 session.
+- [x] **R3b Relics.** (0.338.0; `docs/RVR_RELICS.md`) RvR world: relics on
+  realm temple pads; a relic can be lifted only when the temple's three
+  first-milegate keeps are in enemy hands, the taking realm holds its own
+  relic of that type and 16 enemies stand on the pad; delivery to the own
+  realm's pad of the same type; realm-wide bonus (+10 % per enemy relic while
+  the own one is held) for players, bots and their pets; temple guards by realm;
+  no guild pads; bots target open enemy temples (march logic R4b); relic
+  keeps are not capturable and return to their original realm at start. 50 tests.
 - [x] **R5a World reset + files.** (0.335.0; `docs/RVR_WORLDS.md`) One
   reset routine creates a fresh RvR or Camlann world: seed copy, progress
   cleared in one transaction (characters, inventories, bots, companions,
@@ -160,3 +167,12 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-25 11:25: R3a reviewed (2 mediums + lows fixed) and merged as 0.337.0.
   R3b, R4a, R5b running.
 - 2026-10-25 11:55: R3b, R4a and R5b implemented and in review; wipe follows the R5b merge.
+- 2026-10-25 (R3b agent): R3b in source on branch rvr-r3b, real-client check
+  pending ([RVR_RELICS.md](RVR_RELICS.md)): relics on the realm temple pads; a
+  relic can be lifted only by an enemy realm once all three keeps of its
+  temple's first milegate are in enemy hands and that realm holds its own
+  relic of the type; carried strength to strength, magic to magic; realm-wide
+  upstream bonus for players and bots; relic-temple guards of the temple's
+  realm; no guild keep mounts; bot armies pick open enemy temples (march
+  logic stays R4b); Camlann unchanged.
+- 2026-10-25 12:15: R3b reviewed (ACCEPT, 2 lows fixed) and merged as 0.338.0.
