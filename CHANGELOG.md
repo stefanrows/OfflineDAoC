@@ -12,6 +12,38 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.342.0] - 2026-10-25
+
+### Added
+- RvR mode, port session S1 (`docs/RVR_PORT_MAP.md`): the `Realm-1` world now
+  runs the original upstream (shadowofze/OfflineDAoC 0.38c) RvR event layer,
+  copied verbatim as `RealmRvrEventLayer` behind a facade that dispatches on
+  the world; the fork's layer continues as `CamlannRvrEventLayer` for the
+  Camlann world. In RvR: one siege roll per minute, one attack per realm,
+  level-50 forces only, muster 12+5 min at the realm's portal outpost (relic
+  25 min plus up to six 10-min extensions), march at 108 / 170 attackers or
+  85 %, battle from 60 % arrival, repel after 10 min without attackers, one
+  retake attempt after a player capture, defense rally with horn and
+  announcement, caps 128/64/64 and 240/120/120. Upstream RealmEvent policy,
+  notices, record store, banter and game-wide announcements taken verbatim
+  (five new server properties). 60 upstream unit tests carried
+  (UT_RealmRvr_*), 34 own (UT_RvrPortS1).
+
+### Changed
+- Realm-1 keeps start realm-owned at their original realm and upstream level
+  (the 21 frontier keeps; portal, relic and battleground keeps unchanged); an
+  existing Realm-1 save converts its Frontier Wardens frontier keeps once on
+  the next start (log `RVR_KEEP_ORIGINAL_START`). A fresh RvR world seeds its
+  world bots at level 50 with class loadouts, as upstream's "+ Lv.50" crews.
+- In the Realm-1 world bots no longer claim keeps, take no revenge trips and
+  keep no R4b home reserve; grey-con sparing is off as upstream has none.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.341.0] - 2026-10-25
 
 ### Added
