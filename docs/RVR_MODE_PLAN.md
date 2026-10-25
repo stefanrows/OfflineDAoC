@@ -97,7 +97,7 @@ defaults in code, keep/relic start state from the reset.
   ramp, lowest-load realm first, shortfall not filled by others); grudges per
   realm (48, 3 h); companions unchanged. Open for R4b: revenge trips must be
   capped and measured. 32 tests.
-- [~] **R4b Realm armies.** (`docs/RVR_ARMIES.md`; implemented in source,
+- [x] **R4b Realm armies.** (0.341.0; `docs/RVR_ARMIES.md`) (`docs/RVR_ARMIES.md`; implemented in source,
   real-client check pending) RvR world: a whole warband of eight of one realm
   opens a siege whatever its guilds, every warband of the realm joins one realm
   army (keyed by realm, never a member of another realm); the army musters at
@@ -114,9 +114,17 @@ defaults in code, keep/relic start state from the reset.
   longer split by keep guild; grudges against human killers resolve again
   (both worlds). Camlann unchanged otherwise. 44 tests. R4c keeps the
   upstream thresholds, timings, retake, push/detour.
-- [ ] **R4c Upstream siege-flow port.** Retake, 108/170 march threshold, siege
-  scheduling, ArmyPush/Detour, siege resurrection from upstream 0.33-0.37.
-  2 sessions. After a fetch of Stefan's branch.
+- [ ] **R4c Upstream siege-flow port.** Owner 2026-10-25 15:50: **port the
+  upstream (shadowofze 0.37b+/0.38c) RvR army and siege behaviour, never
+  worse than the original, invent nothing.** Source: fetch-only remote
+  `upstream` (0.38c), Stefan's `docs/UPSTREAM_ADAPTATION_PLAN.md` "Deferred
+  upstream work" block (realm armies, realm-owned siege/retaliation, relic
+  raid activation, battleground goals, realm-only teleports, enemy name
+  masking) is the R4c scope for the Realm-1 world, plus retake, 108/170
+  march threshold, siege scheduling, ArmyPush/Detour, siege resurrection and
+  task 139 step 2 (road-graph fallback). Where R4b invented a rule and
+  upstream has one, upstream wins in RvR; Camlann keeps the fork flow. No
+  reviewer per package (owner 2026-10-25 15:35), one review in R6. 2 sessions.
 - [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
   client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
 
@@ -226,3 +234,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   Decision open: keep two saves (built) or rework. Tools: playable-dev/world-ui.ps1 (dropdown, buttons),
   playable-dev/dlg.ps1 (message boxes). Next by cron: R4b, R4c, R6.
 - 2026-10-25 13:40: session limit. Agent rvr-r4b (daoc-developer) started in worktree /mnt/c/OfflineDAoC-wt-rvr-r4b, branch rvr-r4b; not reviewed, not committed. Next session: check the worktree, review (daoc-reviewer), merge as 0.341.0. R4c may go to Stefan (copy-paste brief given to the owner). Server running on the RvR world.
+- 2026-10-25 15:55: R4b merged as 0.341.0 after one fix round (no re-check, owner: build first, review once in R6). R4c rescoped to an upstream port. Server on the owner PC still runs 0.340.0 RvR.

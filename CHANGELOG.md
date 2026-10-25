@@ -12,6 +12,36 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.341.0] - 2026-10-25
+
+### Added
+- RvR mode, package R4b (`docs/RVR_ARMIES.md`): in a `Realm-1` world the
+  autonomous RvR event layer forms armies per realm instead of per guild.
+  Any full warband of a realm may open a siege, every further warband of that
+  realm joins the same army and never a foreign one; the army musters at the
+  realm's own portal outpost (2-15 min, realm-chat call) and marches
+  together; targets are never an own-realm keep (neutral 1.0, enemy 1.5, home
+  frontier x2); each realm holds an attack plan for about an hour (single,
+  double, opportunist); the whole realm defends its keeps, a third realm joins
+  only at the walls at half cap; a home reserve of +20 % stays while at least
+  `rvr_army_invader_min` (4) invaders, humans and their companions included,
+  stand in the home frontier; revenge trips are capped at
+  `rvr_grudge_hunters_per_target` (2) per target and realm with a 10 min lease
+  (log `RVR_GRUDGE_SHARE`). Tunables `rvr_army_*`. 44 unit tests
+  (UT_RvrRealmArmies), both worlds.
+
+### Changed
+- Open BG units are no longer split by guild in the Realm-1 world (rules
+  audit row 6). RvR status lines say "realm army" instead of "guild army".
+
+### Fixed
+- Grudges against human killers never resolved to a live target in either
+  world (the player lookup used an empty pooled list since M6); they work
+  again in Camlann and RvR.
+
+### Removed
+- None.
+
 ## [0.340.0] - 2026-10-25
 
 ### Added
