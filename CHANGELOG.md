@@ -12,6 +12,32 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.346.0] - 2026-10-26
+
+### Added
+- None.
+
+### Changed
+- Realm-1 world: the open battleground is off by default (`open_bg_enabled`
+  false in a fresh RvR world; an existing Realm-1 save is switched off once on
+  the next start, log `RVR_OPEN_BG_DEFAULT_OFF`); the owner can still enable
+  it in the OPEN BG window or with `/bgsetup enabled on`. Camlann unchanged.
+
+### Fixed
+- Bug 178: two fork rules without an upstream counterpart pulled members out
+  of a marching RvR army in the Realm-1 world ("repeated PvP losses" gave up
+  the keep target, the PvP wall after three deaths ended RvR tasks and threw
+  bots out of siege parties); both are off in Realm-1. Verified live that the
+  march, arrival, gate work and capture follow upstream; defenders joining
+  one by one after the first hit is upstream's rule.
+- Bug 179 (same crash as 175a): the open BG follow pace clamped a slowed bot's
+  speed with a minimum above its maximum (`Math.Clamp` ArgumentException in
+  NpcService, 12 hits in one evening); the lower bound now never exceeds the
+  bot's own maximum.
+
+### Removed
+- None.
+
 ## [0.345.1] - 2026-10-25
 
 ### Added
