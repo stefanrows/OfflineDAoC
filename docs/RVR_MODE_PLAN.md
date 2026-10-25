@@ -45,8 +45,14 @@ defaults in code, keep/relic start state from the reset.
 - [ ] **R3b Relics.** Realm pads, realm-wide bonus, relic sieges. 1 session.
 - [~] **R5a World reset + files.** Implemented (worktree rvr-r5a; launcher 293 tests, both worlds built offline), in review (09:45). Fresh RvR and fresh Camlann world routines,
   per-world DB and side files, properties (today's rates). 1 session.
-- [ ] **R5b Launcher world picker.** RvR default, "PvP" button, reset per
-  world, import guard, both worlds start/stop. 1 session. **Wipe + first RvR
+- [ ] **R5b Launcher world picker.** Owner 2026-10-25 10:05: a **dropdown**
+  "World: RvR (default) / PvP (Camlann)", switchable only while the server is
+  stopped, choice remembered; START SERVER starts the selected world (the
+  launcher writes that world's save path into the server config); each world
+  keeps its own save, switching loses nothing; "Reset world" per world (old
+  save moved to backups, fresh world created, offered when a world's save is
+  missing); active world shown in the status line; Gothwaite controls only in
+  the PvP world; import guard accepts `Realm-1`. 1 session. **Wipe + first RvR
   boot on the owner's PC right after R5b.**
 - [ ] **R4a Bot guilds + login per realm.** ~600 bots per realm in
   single-realm guilds, realm login balance. 1 session.
