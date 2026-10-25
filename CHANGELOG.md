@@ -12,6 +12,28 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.345.1] - 2026-10-25
+
+### Added
+- Docs: two-world contract in `RVR_WORLDS.md` and `CAMLANN.md` (saves, markers,
+  facade, what the RvR world takes from upstream and which fork features stay),
+  player section on the World dropdown and ToA in `PLAY.md`,
+  `RVR_FORK_EXTENSIONS.md` (23 fork bot extensions the RvR world does not have,
+  with integration path, risk and effort; the owner picks items to integrate),
+  status header in `RVR_PORT_MAP.md`.
+
+### Changed
+- `RVR_MODE_PLAN.md`: R4c done (0.342.0-0.345.0), R6 in progress, S4 backlog,
+  owner decisions of 2026-10-25 22:20 (relics upstream rule, frontier porters
+  adapted to RvR, bot mix original by default, release immunity kept).
+  Tasks 147 and 134 moved to verification pending; ToA WP4.3 closed.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.345.0] - 2026-10-25
 
 ### Added
