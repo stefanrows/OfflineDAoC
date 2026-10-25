@@ -75,8 +75,9 @@ Atlantis and Master Levels, Realm Exchange, guild cohesion (guildmates help
 each other), the realm login balancer and realm guild names, Stefan's
 movement port, the road-graph fallback, the fork's frontier transport (kept
 and to be adapted to RvR, owner decision 2026-10-25 22:20), and the PvP
-release immunity (kept, same decision). The R3b relic rule also still runs
-in Realm-1; the owner decided to replace it there with upstream's (S4).
+release immunity (kept, same decision). The R3b relic temple rule no longer
+runs in Realm-1: port session S4 replaced it there with upstream's (owner
+decision 2026-10-25 22:20 #1, [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S4 done").
 
 **Task mix and warband composition** (owner decision 2026-10-25 22:20: the
 original by default). Today Realm-1 still uses the fork's player types to

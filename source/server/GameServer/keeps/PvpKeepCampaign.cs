@@ -70,16 +70,20 @@ namespace DOL.GS.Keeps
             world == WorldModelKind.Realm && portalKeep && !PvpCombatant.IsPlayableRealm(realm) &&
             PvpCombatant.IsPlayableRealm(originalRealm) ? originalRealm : null;
 
-        /// <summary>RvR world (R3b): a relic temple always stands for its original realm. A row of another realm (a
-        /// temple captured under 0.337.0) or of none takes it back at start. Null leaves the keep as it is.</summary>
+        /// <summary>R3b temple rule: a relic temple always stands for its original realm. A row of another realm (a
+        /// temple captured under 0.337.0) or of none takes it back at start. Null leaves the keep as it is.
+        /// Port session S4 (owner decision 2026-10-25 22:20 #1): the RvR world follows upstream 0.38c, where a relic keep
+        /// is taken like any keep and keeps its captor, so this reset no longer runs there; the temple rule belongs to
+        /// Camlann (<see cref="RvrRelicRules.TempleRulesApply"/>), whose relic keeps follow the guild rules and are not
+        /// reset by realm, so the reset is dormant.</summary>
         public static eRealm? RelicKeepStartRealm(WorldModelKind world, bool relicKeep, eRealm realm, eRealm originalRealm) =>
-            world == WorldModelKind.Realm && relicKeep && realm != originalRealm &&
+            world == WorldModelKind.Realm && RvrRelicRules.TempleRulesApply(world) && relicKeep && realm != originalRealm &&
             PvpCombatant.IsPlayableRealm(originalRealm) ? originalRealm : null;
 
         public static void Initialize(AbstractGameKeep keep)
         {
-            // A relic temple stands for its realm (R3b): it is never captured, and one that flipped under 0.337.0
-            // or lost its realm returns to its original realm at start.
+            // A portal keep stands for its realm (R3a). The R3b relic temple reset is dormant since port session S4
+            // (RelicKeepStartRealm): the RvR world's relic keeps keep their captor, as upstream 0.38c.
             if (keep?.DBKeep != null && (PortalKeepStartRealm(WorldMode.Current, keep.IsPortalKeep, keep.Realm, keep.OriginalRealm) ??
                 RelicKeepStartRealm(WorldMode.Current, keep.IsRelic, keep.Realm, keep.OriginalRealm)) is eRealm portalRealm)
             {
@@ -274,8 +278,12 @@ namespace DOL.GS.Keeps
         public static bool CaptureChangesOwner(eRealm keepRealm, bool heldByGarrison, eRealm captor) =>
             PvpCombatant.IsPlayableRealm(captor) && (heldByGarrison || keepRealm != captor);
 
-        /// <summary>RvR world (R3b): a lord kill captures every campaign keep except a relic temple (skin 99).</summary>
-        public static bool RealmCaptureApplies(bool relicKeep) => !relicKeep;
+        /// <summary>Whether a lord kill captures the keep for a realm. RvR world (upstream 0.38c, port session S4): every
+        /// campaign keep, the relic keeps (skin 99) included, as upstream's Normal rules (AbstractGameKeep.Reset). The R3b
+        /// temple rule, under which a relic temple is never captured, applies only where
+        /// <see cref="RvrRelicRules.TempleRulesApply"/> says so (Camlann, which does not capture by realm).</summary>
+        public static bool RealmCaptureApplies(WorldModelKind world, bool relicKeep) =>
+            !relicKeep || !RvrRelicRules.TempleRulesApply(world);
 
         /// <summary>Only a guild of the keep's realm may claim it in the RvR world (owner decision 13): the claimer
         /// fights for the keep's realm and the guild is of that realm (a realm-less guild, as the RvR rules allow,
@@ -327,7 +335,7 @@ namespace DOL.GS.Keeps
         /// </summary>
         public static bool CaptureForRealm(AbstractGameKeep keep, eRealm captor, GameLiving captorLiving)
         {
-            if (!RealmCaptureApplies(keep.IsRelic))
+            if (!RealmCaptureApplies(WorldMode.Current, keep.IsRelic))
             {
                 log.Info($"KEEP_REALM_CAPTURE_SKIPPED keep={keep.KeepID} name={keep.Name} realm={keep.Realm} captor={captor} reason=relic_temple");
                 return false;

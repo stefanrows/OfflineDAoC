@@ -93,7 +93,7 @@ namespace DOL.GS
 
             if (WorldMode.IsRvr)
             {
-                // RvR world (R3b): enemy realms only, behind an open milegate, upstream own-relic rule.
+                // RvR world: enemy realms only, upstream 0.38c own-relic rule (no milegate since port session S4).
                 string refusal = RelicMgr.GetRvrPickupRefusal(player, this);
                 if (refusal != null)
                 {
@@ -220,8 +220,10 @@ namespace DOL.GS
                 messages.Add($"It is held by {(CurrentRelicPad is GameKeepRelicPad pad ? pad.Guild?.Name ?? "an unclaimed keep" : PvpKeepCampaign.GarrisonName)}.");
             else
                 messages.Add(IsMounted ? $"It is owned by {(player.Realm == Realm ? "your realm" : GlobalConstants.RealmToName(Realm))}." : "It is without owner, take it!");
-            // RvR world (R3b): an enemy sees whether the temple's milegate still stands.
-            if (WorldMode.IsRvr && IsMounted && player.Realm != Realm && CurrentRelicPad is not GameKeepRelicPad)
+            // R3b temple rule (Camlann only since port session S4, RvrRelicRules.TempleRulesApply; the RvR world has no
+            // milegate, as upstream 0.38c): an enemy sees whether the temple's milegate still stands.
+            if (WorldMode.IsRvr && RvrRelicRules.TempleRulesApply(WorldMode.Current) && IsMounted && player.Realm != Realm &&
+                CurrentRelicPad is not GameKeepRelicPad)
                 messages.Add(RelicMgr.IsTempleOpen(CurrentRelicPad) ? "Its milegate has fallen; the temple stands open." : "Its milegate still stands.");
             return messages;
         }

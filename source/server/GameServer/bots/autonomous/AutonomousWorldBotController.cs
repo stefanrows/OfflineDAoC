@@ -659,6 +659,13 @@ namespace DOL.GS
                         // crossing, even if the leader still has several edges
                         // to traverse. Waiting for that member to come back
                         // while it waits at the camp strands both sides.
+                        // RvR world (upstream 0.38c AutonomousGroupPace, port session S4): far from the crossing the
+                        // leader keeps its full speed unless a member trails beyond 1,500 (the followers catch up).
+                        // Fork: Camlann holds (or loops) as soon as the party is not cohesive.
+                        bool farFromCrossing = next == null || Distance(bot.X, bot.Y, next.SourceX, next.SourceY) > AutonomousGroupPace.TrailRadius;
+                        if (WorldMode.IsRvr && !enteringStagingArea && !crossingStarted && farFromCrossing &&
+                            KeepGroupMovingAtPace(bot))
+                            return TravelAcrossRegions(bot);
                         if (!enteringStagingArea && !crossingStarted)
                         {
                             bool nearCrossing = next != null && Distance(bot.X, bot.Y, next.SourceX, next.SourceY) <=
@@ -730,7 +737,10 @@ namespace DOL.GS
                     _patrolDestination = null;
                     if (_groupDirective?.IsDynamic == true && _groupDirective.Leader != bot)
                         return FollowDynamicGroupLeader(bot, _groupDirective);
-                    if (_groupDirective?.IsDynamic == true && !AutonomousBotGroupCoordinator.IsCohesive(_groupDirective))
+                    // RvR world (upstream 0.38c AutonomousGroupPace, port session S4): the leader holds only for a member
+                    // far behind. Fork: Camlann holds (or loops) as soon as the party is not cohesive.
+                    if (_groupDirective?.IsDynamic == true && !AutonomousBotGroupCoordinator.IsCohesive(_groupDirective) &&
+                        !(WorldMode.IsRvr && KeepGroupMovingAtPace(bot)))
                     {
                         bool looping = LoopInsteadOfHold(bot, campDistance <= AutonomousLeaderLoop.CampClearance);
                         SetStatus(bot, "Waiting for group members", GoalText(), looping
@@ -1624,6 +1634,11 @@ namespace DOL.GS
             // An RvR member sprints to close a gap to its slot (P6).
             if (directive.ObjectiveKind == eAutonomousObjectiveKind.RvR && bot.CurrentRegionID == leader.CurrentRegionID)
                 AutonomousRvrSpeed.UpdateFollowerSprint(bot, Vector3.Distance(new(bot.X, bot.Y, bot.Z), formation));
+            // RvR world (upstream 0.38c, port session S4): close the gap on the move so the party travels as one unit
+            // instead of the leader stopping for formation (the follower runs up to 25% faster while behind).
+            // Fork: Camlann followers keep the fork's own catch-up (AutonomousGroupMotion.FollowSpeed).
+            if (WorldMode.IsRvr && bot.CurrentRegionID == leader.CurrentRegionID)
+                AutonomousGroupPace.CatchUp(bot, Vector3.Distance(new(bot.X, bot.Y, bot.Z), formation), GameLoop.GameLoopTime);
             if (bot.CurrentRegionID != leader.CurrentRegionID)
             {
                 // Never teleport a persistent group member to catch its leader.
@@ -4069,6 +4084,8 @@ namespace DOL.GS
                 _expeditionRouteRetry = GameLoop.GameLoopTime + 30_000;
                 Log.Warn($"REALM_EXPEDITION_ROUTE_RETRY bot={bot.Name} id={bot.DatabaseID} region={bot.CurrentRegionID} position={bot.X},{bot.Y},{bot.Z} reason={reason}");
                 SetStatus(bot, "Expedition route retry", _camp?.MonsterName ?? "Rejoin expedition", reason);
+                // RvR world (upstream 0.38c, port session S4): a member stranded on a floor island regroups at the front.
+                if (WorldMode.IsRvr) TryRegroupStrandedExpeditionMember(bot);
                 return;
             }
             if (_camp != null)
@@ -4701,6 +4718,23 @@ namespace DOL.GS
                     : $"Boarded free {stable.Ticket.Name}; {stable.PlannedHops} planned leg(s)",
                 _camp?.MonsterName ?? string.Empty, stable.DestinationName, true);
             return true;
+        }
+
+        private bool _groupPaceWaiting;
+
+        /// <summary>
+        /// The group leader keeps moving at full speed unless a member is far behind; then it
+        /// stops until that member is close again (see AutonomousGroupPace). Upstream 0.38c, port session S4;
+        /// called in the RvR world only.
+        /// </summary>
+        private bool KeepGroupMovingAtPace(GameBot bot)
+        {
+            if (_groupDirective?.IsDynamic != true || _groupDirective.Leader != bot) return false;
+            bool move = AutonomousGroupPace.Decide(
+                AutonomousBotGroupCoordinator.FarthestMemberDistance(_groupDirective), _groupPaceWaiting) ==
+                AutonomousGroupPace.Decision.FullSpeed;
+            _groupPaceWaiting = !move;
+            return move;
         }
 
         private bool IssuePath(GameBot bot, Vector3 destination, Vector3? validatedContinuation = null,
@@ -5386,6 +5420,19 @@ namespace DOL.GS
             {
                 escapeRegion = bot.CurrentRegionID;
                 escapeName = bot.CurrentZone?.Description ?? $"region {escapeRegion}";
+            }
+            else if (WorldMode.IsRvr &&
+                     _terminalRouteFailuresInPocket >= AutonomousRouteRecoveryPolicy.FailuresBeforeSafeRelocation &&
+                     AutonomousRealmRaid.TryDungeonRegroupPoint(bot, out ushort raidRegion, out Vector3 raidFront) &&
+                     Vector3.DistanceSquared(current, raidFront) > 300f * 300f)
+            {
+                // A raider inside its raid's dungeon rejoins the raid front, not its capital. Run 9 (2026-10-14):
+                // Hibernia's Darkness Falls raiders arriving at the entrance (46,325 / 40,969) could not route the
+                // 15,000+ units to the front, were sent to Tir na Nog, rode back and failed again, 338 times.
+                // (Upstream 0.38c, port session S4; RvR world. Fork: Camlann's raiders keep the fork recovery below.)
+                escapeRegion = raidRegion;
+                escape = raidFront;
+                escapeName = "the raid front";
             }
             else
             {

@@ -235,7 +235,7 @@ namespace DOL.GS
             if (player == null || relic == null)
                 return false;
 
-            // RvR world (R3b): realm pads behind the milegates, upstream pickup rules.
+            // RvR world: realm pads, upstream 0.38c pickup rules (no milegate there since port session S4).
             if (WorldMode.IsRvr)
                 return GetRvrPickupVerdict(player, relic) == RvrRelicRules.PickupVerdict.Allowed;
 
@@ -320,7 +320,9 @@ namespace DOL.GS
             eRealm takerRealm = ServerRules.PvpCombatant.AllianceRealm(taker);
             GameRelicPad pad = relic.CurrentRelicPad;
             bool mounted = relic.IsMounted && pad != null;
-            bool templeOpen = mounted && IsTempleOpen(pad, keepHolder);
+            // RvR world (upstream 0.38c, port session S4): no milegate seals a temple; the relic itself is the objective.
+            // The R3b milegate counts only where the temple rule applies (RvrRelicRules.TempleRulesApply: Camlann).
+            bool templeOpen = mounted && (!RvrRelicRules.TempleRulesApply(WorldMode.Current) || IsTempleOpen(pad, keepHolder));
             bool holdsOwn = false;
 
             foreach (GameRelic other in _relicsArray)
@@ -397,7 +399,8 @@ namespace DOL.GS
 
         /// <summary>
         /// RvR world: whether a world-bot army of <paramref name="raider"/>'s realm should raid this relic keep: an
-        /// enemy realm's temple whose milegate is open and that holds a relic the raider's realm may lift. Never in
+        /// enemy realm's temple that holds a relic the raider's realm may lift (upstream 0.38c pickup rule; no milegate
+        /// in the RvR world since port session S4). Never in
         /// Camlann (relic raids stay off there, CAMLANN.md decision 10).
         /// </summary>
         public static bool IsRelicRaidTarget(AbstractGameKeep keep, GameLiving raider)

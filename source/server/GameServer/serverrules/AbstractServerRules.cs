@@ -1165,7 +1165,7 @@ namespace DOL.GS.ServerRules
             if (killedNpc.CampBonus > 0)
                 killedNpc.CampBonus -= 0.02;
 
-            if (killedNpc.CanDropLoot)
+            if (killedNpc.CanDropLoot && !NoItemLoot(killedNpc))
             {
                 // The set contains potential item owners (entities able to pick the item up). They are the battlegroup, group, and player that did the most damage.
                 // The set is ordered from the highest damaging entity to the lowest. If two entities did the same amount of damage, the first that's added to the set is prioritized.
@@ -1802,6 +1802,17 @@ namespace DOL.GS.ServerRules
                     companion.GainExperience(arguments, notify: false);
             }
         }
+
+        /// <summary>
+        /// Owner 2026-10-07: realm defenders and player stand-ins drop no items. Keep guards, archers and lords
+        /// (GameKeepGuard, GuardLord included), gamebots and pets of players or gamebots (in DAoC killing an enemy
+        /// player or a pet gave realm points, never items). A /raid 80 siege filled the player's bags with ROG drops.
+        /// (Upstream 0.38c, port session S4, both worlds: the fork had no item rule for these kills; Camlann's
+        /// party gear and realm points are paid before this check and stay unchanged.)
+        /// </summary>
+        public static bool NoItemLoot(GameNPC killedNpc) =>
+            killedNpc is Keeps.GameKeepGuard or GameBot ||
+            killedNpc.Brain is IControlledBrain && AutonomousBotRealmPointRewards.ResolveRootRewardOwner(killedNpc) is GamePlayer or GameBot;
 
         public virtual void DropLoot(GameNPC killedNpc, GameObject killer, SortedSet<ItemOwnerTotalDamagePair> itemOwners)
         {

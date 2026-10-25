@@ -116,7 +116,7 @@ namespace DOL.GS
         public long MovementElapsedTicks => IsMoving ? GameLoop.GameLoopTime - MovementStartTick : 0;
         public bool FixedSpeed { get; set; }
         public override short MaxSpeed => FixedSpeed ? MaxSpeedBase : Owner is GameBot bot
-            ? CompanionFollowPolicy.SpeedLimit(bot, base.MaxSpeed) : base.MaxSpeed;
+            ? AutonomousGroupPace.Apply(bot, CompanionFollowPolicy.SpeedLimit(bot, base.MaxSpeed)) : base.MaxSpeed;
         public bool IsMovingOnPath => IsFlagSet(MovementState.OnPath);
         public bool IsNearSpawn => Owner.IsWithinRadius(Owner.SpawnPoint, 25);
         public bool IsDestinationValid { get; private set; }

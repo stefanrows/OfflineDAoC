@@ -12,6 +12,39 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.347.0] - 2026-10-26
+
+### Added
+- Realm-1 world, upstream 0.38c port session S4 (implemented in source,
+  real-client check pending; `RVR_PORT_MAP.md` "S4 done"): keep lords take no
+  damage from bots, bot pets or siege engines while the gate or keep door
+  stands (upstream lord shield); the group pace of upstream (`AutonomousGroupPace`:
+  leader waits at crossings and camp approaches, followers catch up); the
+  battleground siege announcements of the event layer behind
+  `rvr_battleground_announcements`; the RvR dashboard shows "marching in Nm"
+  and the attack window and names the owning realm of keeps and relics; the
+  upstream raid fixes (refill of short parties, pooled forced parties, hub
+  release after three failed routes, dungeon regroup point, failed-post
+  retry); a forced expedition ends the realm's unstarted automatic rallies
+  (`SupersedeAutomatic`).
+- Both worlds: keep guards, lords, gamebots, companions, `/spawn` helpers and
+  their pets drop no items any more (upstream `NoItemLoot`); coins, realm
+  points and party gear are unchanged.
+
+### Changed
+- Realm-1 relics follow upstream's rule: the relic itself is the objective,
+  relic keeps are captured like any keep, 8 enemies on the pad lift a relic;
+  the fork's R3b temple/milegate seal (`RvrRelicRules.TempleRulesApply`) is
+  reserved for Camlann and dormant there (Camlann relics are guild relics;
+  wiring it in needs an owner decision).
+
+### Fixed
+- `BotBrain.SupportOffense` skipped a bot's first per-fight roll
+  (`long.MinValue` overflow, same pattern as the 0.345.0 expiry fix).
+
+### Removed
+- None.
+
 ## [0.346.0] - 2026-10-26
 
 ### Added

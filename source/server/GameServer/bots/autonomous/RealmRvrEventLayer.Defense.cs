@@ -70,9 +70,9 @@ namespace DOL.GS
             if (source != null && sourceRealm != eRealm.None && sourceRealm != keep.Realm)
             {
                 KeepCombatPressure[id] = now;
-                // Fork: the battleground siege announcement (BattlegroundBrackets) and upstream's /raid companion siege
-                // hooks (CompanionRaidSiege) are not ported; the fork's battleground campaign and companions keep their
-                // own rules (docs/RVR_PORT_MAP.md: S3 and "keep fork companions").
+                ObserveBattlegroundSiege(keep, sourceRealm, now, PlayerInstigator(source) != null);
+                // Fork: upstream's /raid companion siege hooks (CompanionRaidSiege) are not ported; the fork's
+                // companions keep their own rules (docs/RVR_PORT_MAP.md: "keep fork companions").
             }
             GamePlayer player = PlayerInstigator(source);
             if (player == null || player.Realm == eRealm.None || player.Realm == keep.Realm) return;
@@ -80,8 +80,39 @@ namespace DOL.GS
             DefenseAlarms[id] = new(keep, player, now, ForceSize(player));
         }
 
-        // Fork: upstream's battleground siege announcements (ObserveBattlegroundSiege, BattlegroundSiegeIsNew) need its
-        // battleground bracket goal (BattlegroundBrackets, AutonomousBattlegroundWave); they come with port session S3.
+        // Battleground keeps have no planned siege event, so a siege "starts" when an enemy realm first damages the keep
+        // after it has been quiet for BattlegroundSiegeQuietMilliseconds (owner 2026-10-07: announce battleground keep
+        // sieges starting and keeps taken; the take itself is announced by PlayerMgr.BroadcastCapture).
+        // (Port session S4: BattlegroundBrackets came with S3, AutonomousBattlegroundWave is upstream's file verbatim.)
+        public const long BattlegroundSiegeQuietMilliseconds = 5 * 60_000L;
+        private static readonly Dictionary<(int Keep, eRealm Attacker, eRealm Holder), long> BattlegroundSiegePressure = new();
+
+        // Timed per attacking realm and holder, so a three-realm brawl announces each realm's siege once, not every hit.
+        public static bool BattlegroundSiegeIsNew(long previousTick, long now) =>
+            previousTick == 0 || now - previousTick >= BattlegroundSiegeQuietMilliseconds;
+
+        private static void ObserveBattlegroundSiege(AbstractGameKeep keep, eRealm attacker, long now, bool playerInvolved)
+        {
+            if (!BattlegroundBrackets.IsBattlegroundRegion(keep.Region)) return;
+            // A stray bot of a realm too small for an assault is no siege (Thidranki, 2026-10-17: nine announced
+            // sieges in two hours by one or two bots each, none of which went anywhere). Players always count.
+            if (!playerInvolved && AutonomousBattlegroundWave.TooFewForAssault(attacker, BattlegroundBrackets.ForRegion(keep.Region)))
+                return;
+            bool fresh;
+            lock (BattlegroundSiegePressure)
+            {
+                var key = ((int)keep.KeepID, attacker, keep.Realm);
+                fresh = BattlegroundSiegeIsNew(BattlegroundSiegePressure.GetValueOrDefault(key), now);
+                BattlegroundSiegePressure[key] = now;
+            }
+            if (!fresh) return;
+            string battleground = BattlegroundBrackets.ForRegion(keep.Region)?.Name ?? "the battleground";
+            GameWideAnnouncements.Queue(AnnouncementKind.RvrBattleground,
+                GameWideAnnouncements.BattlegroundSiegeStarted(attacker, keep.Name, battleground, keep.Realm));
+            var log = DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrEventLayer));
+            if (log.IsInfoEnabled) log.Info($"BG_SIEGE_STARTED keep=\"{keep.Name}\" region={keep.Region} attacker={GlobalConstants.RealmToName(attacker)} " +
+                $"holder={(keep.Realm == eRealm.None ? "unclaimed" : GlobalConstants.RealmToName(keep.Realm))}");
+        }
 
         /// <summary>When an enemy realm last damaged this keep (0 if never).</summary>
         public static long LastKeepPressure(AbstractGameKeep keep) =>

@@ -132,6 +132,9 @@ public static partial class AutonomousBotGroupCoordinator
         public Dictionary<long, Vector3> RendezvousSlots { get; } = new();
         public HashSet<long> HeldUnreachableMembers { get; } = new();
         public Dictionary<long, long> ExpeditionRouteRetry { get; } = new();
+        // Upstream 0.38c (port session S4, RvR world): failed hub routes per member and the roles of released members.
+        public Dictionary<long, int> ExpeditionRouteFailures { get; } = new();
+        public List<BotPveGroupRole> ReleasedRaidRoles { get; } = new();
         public HashSet<long> RemoteMemberIds { get; } = new();
         // Open BG preset Server PvP unit: members of another region than the leader. They board at the open BG porter of
         // their own region (never travel to the rendezvous), count as arrived and hold no formation slot.
@@ -657,6 +660,55 @@ public static partial class AutonomousBotGroupCoordinator
             .All(member => member.CurrentRegionID == directive.Leader.CurrentRegionID && member.GetDistanceTo(directive.Leader) <= radius);
         waiting.Value = !together;
         return together;
+    }
+
+    /// <summary>How far the farthest living member trails the leader; MaxValue when one is in another region.
+    /// (Upstream 0.38c, port session S4: read by <see cref="AutonomousGroupPace"/> in the RvR world only.)</summary>
+    public static float FarthestMemberDistance(Directive directive)
+    {
+        GameBot leader = directive?.Leader;
+        if (leader == null) return 0;
+        float farthest = 0;
+        long now = GameLoop.GameLoopTime;
+        foreach (GameBot member in BotMembers(leader.Group))
+        {
+            if (!member.IsAlive || member == leader) continue;
+            if (member.CurrentRegionID != leader.CurrentRegionID) return float.MaxValue;
+            float distance = member.GetDistanceTo(leader);
+            // A member stuck for 45 seconds no longer holds the group (see AutonomousGroupMemberStall).
+            if (AutonomousGroupMemberStall.Release(member, leader, distance, CohesionRadius, now)) continue;
+            farthest = Math.Max(farthest, distance);
+        }
+        return farthest;
+    }
+
+    /// <summary>
+    /// Upstream 0.38c (port session S4, RvR world): a member stranded on a disconnected patch of navmesh retried the
+    /// same route every minute forever (Yrdis, Tuscaran rally, 2026-10-04: 59 times in 80 minutes) and its party never
+    /// counted at the hub. After a few failed attempts it leaves the party (no teleport) and the other members go on;
+    /// the raid refills the gap (TryRefillRaidParty). Fork: upstream's pocket escape (navmesh/pockets.json) is not
+    /// ported. Called with the coordinator lock held; true when the member was released.
+    /// </summary>
+    private static bool TryEscapeRaidHubRoute(Session session, Group group, GameBot bot, long memberKey)
+    {
+        int failures = session.ExpeditionRouteFailures[memberKey] = session.ExpeditionRouteFailures.GetValueOrDefault(memberKey) + 1;
+        if (!RealmRaidHubEscape.ShouldEscape(failures)) return false;
+        session.ExpeditionRouteFailures.Remove(memberKey);
+        session.ExpeditionRouteRetry.Remove(memberKey);
+        session.HeldUnreachableMembers.Remove(memberKey);
+        if (session.PveRoles.Remove(memberKey, out BotPveGroupRole lostRole))
+            session.ReleasedRaidRoles.Add(lostRole);
+        AutonomousRealmRaid.ReleasePartyMember(group, bot);
+        session.ProcessingAttendanceRemovals = true;
+        try
+        {
+            group.RemoveMember(bot, retainSingleRemainingMember: true);
+            AutonomousObjectiveAssignments.BeginSoloAfterGroupTask(bot, "Released from the raid party: no connected route to the hub");
+        }
+        finally { session.ProcessingAttendanceRemovals = false; }
+        session.LockedSize = BotMembers(group).Length;
+        Log.Warn($"REALM_RAID_HUB_ROUTE_RELEASED event={session.RaidMusterEvent} group={session.Id} bot={bot.Name} region={bot.CurrentRegionID} position={bot.X},{bot.Y},{bot.Z} failures={failures}");
+        return true;
     }
 
     public static bool IsRecovering(GameBot bot)
@@ -1242,6 +1294,8 @@ public static partial class AutonomousBotGroupCoordinator
                 // its expedition is counting attendance at a fixed service hub.
                 if (session.HeldUnreachableMembers.Add(MemberKey(bot)))
                     Log.Warn($"REALM_RAID_HUB_ROUTE_FAILED event={session.RaidMusterEvent} group={session.Id} bot={bot.Name} region={bot.CurrentRegionID} position={bot.X},{bot.Y},{bot.Z} reason={reason}");
+                if (WorldMode.IsRvr && TryEscapeRaidHubRoute(session, group, bot, MemberKey(bot)))
+                    return true;
                 session.ExpeditionRouteRetry[MemberKey(bot)] = GameLoop.GameLoopTime + 60_000;
                 return true;
             }

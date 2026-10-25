@@ -56,6 +56,10 @@ namespace DOL.GS
             public GameLiving[] Support = [];
             /// <summary>One battlegroup for the whole raid: its parties must never attack each other.</summary>
             public readonly BattleGroup Battle = new();
+            /// <summary>Members released from this raid (no route to the hub); never recruited back. (Upstream 0.38c, RvR world.)</summary>
+            public readonly HashSet<long> Released = new();
+            public long NextRefill;
+            public long NextPostWarning;
         }
         private sealed class Party
         {
@@ -72,6 +76,11 @@ namespace DOL.GS
             public View DestinationView;
             public readonly HashSet<long> CatchingUp = new();
             public readonly Dictionary<long, long> CorpseSince = new();
+            // A post search that found nothing is not repeated for the same spot for a while (see TryBattlePost).
+            public Vector3 FailedPostCenter;
+            public long FailedPostUntil;
+            /// <summary>The party size when it joined; released members are replaced up to it (upstream 0.38c, RvR world).</summary>
+            public int Target;
         }
         private static readonly object Sync = new();
         private static readonly Dictionary<string, Raid> Raids = new();
@@ -83,6 +92,38 @@ namespace DOL.GS
         // Upstream 0.38c (RvR world): each realm's last automatic event; the next automatic start picks the other one.
         private static readonly Dictionary<eRealm, string> LastAutomatic = new();
         private static readonly Logging.Logger RaidLog = Logging.LoggerManager.Create(typeof(AutonomousRealmRaid));
+
+        // Upstream 0.38c (port session S4): every party destination of a running neutral-dungeon raid (Darkness Falls,
+        // Summoner's Hall), read without the raid lock. Fork: the neutral raids and the Darkness Falls route are not
+        // ported (docs/RVR_PORT_MAP.md "Not done in S4"), so the list stays empty and the trash respawn below keeps its
+        // own timers, exactly as upstream does for Caer Sidi and Galladoria (its list only ever held neutral regions).
+        private static volatile (ushort Region, int X, int Y)[] _raidDestinations = [];
+
+        public static bool HasActiveRaidIn(ushort region)
+        {
+            foreach (var d in _raidDestinations)
+                if (d.Region == region) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Run 8 (2026-10-14): the Albion raid in Darkness Falls stood 6,000-10,000 units short of Prince Ba'alorien
+        /// for forty minutes, fighting essence shredders, naburite drinkers and succubi that came back every 100-180
+        /// seconds (263 essence shredders alone), and skipped him untouched. While a bot raid is inside Darkness
+        /// Falls, Summoner's Hall, Caer Sidi or Galladoria, the ordinary monsters there stay down for ten minutes;
+        /// bosses, epic encounters and scripted adds keep their own timers, and nothing changes once the raid ends.
+        /// (Upstream 0.38c, port session S4, both worlds.)
+        /// </summary>
+        public const int RaidTrashRespawnMilliseconds = 10 * 60_000;
+        public static readonly ushort[] SlowRespawnRegions = [249, 248, 60, 191];
+
+        public static int RaidRespawnInterval(GameNPC npc, int interval)
+        {
+            if (interval <= 0 || interval >= RaidTrashRespawnMilliseconds || npc is IGameEpicNpc or GameSummonedPet or GameBot ||
+                npc.Realm != eRealm.None || Array.IndexOf(SlowRespawnRegions, npc.CurrentRegionID) < 0 || !HasActiveRaidIn(npc.CurrentRegionID))
+                return interval;
+            return RaidTrashRespawnMilliseconds;
+        }
 
         /// <summary>A realm never runs the same automatic PvE event twice in a row (forced events are separate). Upstream 0.38c.</summary>
         public static bool MayStartAutomatic(string id, string lastAutomaticId) =>
@@ -253,7 +294,7 @@ namespace DOL.GS
                 int slot = Enumerable.Range(0, RealmRaidRecruitmentPolicy.MaximumParties).FirstOrDefault(candidate =>
                     raid.Parties.Values.All(p => p.FormationSlot != candidate), -1);
                 if (slot < 0 || !TryStaging(raid, slot, out Vector3 staging) || !TryHubPost(raid, slot, out var hubPost)) return false;
-                var party = new Party { Members = members, FormationSlot = slot, Staging = staging, HubPost = hubPost };
+                var party = new Party { Members = members, FormationSlot = slot, Staging = staging, HubPost = hubPost, Target = members.Length };
                 raid.Parties[leader.Group] = party;
                 Membership[leader.Group] = raid;
                 DefenseGroups[leader.Group] = 0;
@@ -329,8 +370,13 @@ namespace DOL.GS
         public static bool Start(string id, eRealm realm, out string reason, bool forced = false)
         {
             bool byRealm = RaidsByRealm(WorldMode.Current);
-            // RvR world (upstream 0.38c): the realm that raids is the one asked for, and only its bots are reserved.
-            GameBot[][] recruits = forced ? byRealm ? AutonomousBotGroupCoordinator.PlanForcedRaid(realm) : AutonomousBotGroupCoordinator.PlanForcedRaid() : [];
+            if (byRealm && forced && !UpstreamForcedPreview(id, realm, out reason)) return false;
+            RealmRaidMuster.Hub rallyHub = byRealm ? RealmRaidMuster.Hubs.FirstOrDefault(h => h.Event == id) : null;
+            // RvR world (upstream 0.38c): the realm that raids is the one asked for, and only its bots are reserved,
+            // the closest to the rally hub first (port session S4).
+            GameBot[][] recruits = !forced ? []
+                : byRealm ? rallyHub != null ? AutonomousBotGroupCoordinator.PlanForcedRaid(realm, rallyHub.Region, rallyHub.Center) : []
+                : AutonomousBotGroupCoordinator.PlanForcedRaid();
             if (forced && recruits.Sum(p => p.Length) < RealmRaidRecruitmentPolicy.MaximumBots)
             {
                 reason = $"Not started: only {recruits.Sum(p => p.Length)}/300 eligible level-50 bots could be reserved. No tasks were cancelled.";
@@ -456,10 +502,45 @@ namespace DOL.GS
                 !raid.Definition.IsDungeon && ReferenceEquals(raid.Boss,target);
         }
 
+        /// <summary>
+        /// RvR world (upstream 0.38c, port session S4): a forced dungeon raid proves its entrance before reserving 300
+        /// bots (a route that can never be built reports why at once instead of after the roster is gathered, forced
+        /// Darkness Falls, 2026-10-11), and a forced expedition ends the realm's unstarted automatic rallies
+        /// (<see cref="SupersedeAutomatic"/>). Fork: the dungeon check uses the fork's route builder (no neutral raids).
+        /// </summary>
+        private static bool UpstreamForcedPreview(string id, eRealm realm, out string reason)
+        {
+            reason = null;
+            Definition preview = Definitions.FirstOrDefault(d => d.Id == id && d.Realm == realm);
+            if (preview is { IsDungeon: true } && !RealmRaidDungeonRoute.TryCreate(preview.Region, preview.Trigger, preview.FinalTypes, out _))
+            {
+                reason = "The dungeon entrance/final approach could not be validated. No party was assigned.";
+                RaidLog.Warn($"REALM_RAID_START_UNAVAILABLE event={id} reason=\"no validated entrance\"");
+                return false;
+            }
+            if (preview != null) SupersedeAutomatic(realm, id);
+            return true;
+        }
+
+        // Runs 12 and 13 (2026-10-15/16): an automatic Darkness Falls or Summoner's Hall rally opened a minute before the
+        // forced raid and held 140+ of the realm's level-50 bots, so forced Galladoria reserved only 288 of 300 and forced
+        // Caer Sidi rallied 143 of the 200 it needs. A forced expedition ends the realm's automatic rallies that have not
+        // started yet (no cooldown), the way a forced siege supersedes an unstarted automatic siege.
+        // (Upstream 0.38c, port session S4; RvR world only, where expeditions belong to a realm.)
+        private static void SupersedeAutomatic(eRealm realm, string forcedId)
+        {
+            lock (Sync)
+                foreach (Raid automatic in Raids.Values.Where(r => r.Definition.Realm == realm && !r.Forced && !r.Started &&
+                             r.Definition.Id != forcedId).ToArray())
+                    End(automatic, GameLoop.GameLoopTime, $"{StoppedByPlayer}: superseded by the forced {forcedId} expedition.");
+        }
+
         // Called outside the raid lock by the single coordinator. Only one
         // party is rebuilt per five seconds; never 300 native route probes at once.
+        // RvR world: upstream 0.38c's batch with pooled forced parties and party refills (RecruitForcedPartiesUpstream).
         public static void RecruitForcedParty(long now)
         {
+            if (WorldMode.IsRvr) { RecruitForcedPartiesUpstream(now); return; }
             string id = null;
             GameBot[] members = null;
             lock (Sync)
@@ -509,6 +590,143 @@ namespace DOL.GS
             }
         }
 
+        // Upstream 0.38c (port session S4, RvR world): called outside the raid lock by the single coordinator. At most
+        // one party per running expedition is rebuilt per five seconds (it was one in total, so three rallies at once
+        // took three times as long to form); never 300 native route probes at once.
+        private static void RecruitForcedPartiesUpstream(long now)
+        {
+            var batch = new List<(string Id, GameBot[] Members)>();
+            lock (Sync)
+            {
+                if (now < _nextForcedRecruitment) return;
+                _nextForcedRecruitment = now + 5_000;
+                foreach (var raid in Raids.Values)
+                {
+                    if (!raid.Forced)
+                        foreach (var stale in raid.ForcedParties.Where(p => p.Any(b =>
+                                     !IsEligible(b) || !AutonomousBotRegistry.Contains(b.DatabaseID) || b.Group != null ||
+                                     !AutonomousObjectiveAssignments.Is(b, eAutonomousObjectiveKind.GroupPve))).ToArray())
+                        {
+                            raid.ForcedParties.Remove(stale);
+                            foreach (var b in stale)
+                                if (Reservations.GetValueOrDefault(b.DatabaseID) == raid.Definition.Id)
+                                    Reservations.TryRemove(b.DatabaseID, out _);
+                        }
+                    if (!raid.Forced && raid.Support.Length < RealmRaidRecruitmentPolicy.MaximumBots && raid.ForcedParties.Count == 0)
+                    {
+                        int size = Math.Min(8, RealmRaidRecruitmentPolicy.MaximumBots - raid.Support.Length);
+                        var waiting = AutonomousBotGroupCoordinator.PlanWaitingRaidParty(raid.Definition.Realm, size);
+                        if (waiting != null)
+                        {
+                            raid.ForcedParties.Add(waiting);
+                            foreach (var b in waiting) Reservations[b.DatabaseID] = raid.Definition.Id;
+                        }
+                    }
+                    // A bot riding a stable route can join: it lands and travels to the hub
+                    // like everyone else. Only an active fight holds a member back.
+                    bool Free(GameBot b) => IsEligible(b) && b.IsAlive && AutonomousBotRegistry.Contains(b.DatabaseID) &&
+                        !b.InCombat && !b.IsAttacking && (b.Brain as BotBrain)?.HasAggro != true;
+                    // Only a whole planned roster: after pooled parties formed, the rosters they drew
+                    // from are left short, can never form (4 or 8 only), and used to block the pooled
+                    // path below for good (Darkness Falls Albion stuck at 21 parties, 2026-10-06). An
+                    // automatic raid's waiting party (8, or the final 4) is always whole.
+                    GameBot[] members = raid.ForcedParties.FirstOrDefault(p => (p.Length == 8 || !raid.Forced) && p.All(Free));
+                    if (members != null)
+                    {
+                        raid.ForcedParties.Remove(members);
+                        raid.ForcedParties.Add(members); // A bad route cannot starve the other parties.
+                    }
+                    else if (raid.Forced)
+                    {
+                        // Planned rosters were fixed sets of 8 from all over the realm, so one busy
+                        // member held the other seven back (Oct 5 test: Albion formed 17 of 38
+                        // parties in 22 minutes). Build the next party from whichever reserved
+                        // bots are free, closest to the hub first, with the same role rules.
+                        GameBot[] reserved = raid.ForcedParties.SelectMany(p => p).Distinct().ToArray();
+                        members = AutonomousBotGroupCoordinator.ComposeForcedParty(reserved.Where(Free).ToArray(), reserved.Length);
+                    }
+                    if (members == null) continue;
+                    batch.Add((raid.Definition.Id, members));
+                }
+            }
+            // A party that lost a member (released after failing to reach the hub) takes one
+            // replacement per raid every 10 seconds, so the raid gets back to its full size
+            // instead of staying short (Galladoria, 2026-10-06: 296/300 after four members were
+            // trapped in Dun Lamfhota). The newcomer joins as a late member and travels on its own.
+            var refills = new List<(string Id, Group Group, RealmRaidMuster.Hub Hub, bool Forced, long[] Released)>();
+            lock (Sync)
+            {
+                foreach (var raid in Raids.Values)
+                {
+                    if (now < raid.NextRefill) continue;
+                    var shortParty = raid.Parties.FirstOrDefault(p => RealmRaidRecruitmentPolicy.NeedsReplacement(p.Value.Target, p.Value.Members.Length));
+                    if (shortParty.Key == null) continue;
+                    raid.NextRefill = now + 10_000;
+                    refills.Add((raid.Definition.Id, shortParty.Key, raid.Hub, raid.Forced, raid.Released.ToArray()));
+                }
+            }
+            foreach (var (id, group, hub, forced, released) in refills)
+                AutonomousBotGroupCoordinator.TryRefillRaidParty(id, group, hub.Region, hub.Center, forced, released);
+
+            foreach (var (id, members) in batch)
+            {
+                if (!AutonomousBotGroupCoordinator.FormForcedRaidParty(id, members)) continue;
+                lock (Sync)
+                {
+                    if (Raids.TryGetValue(id, out var raid) && !raid.ForcedParties.Remove(members))
+                    {
+                        // A pooled party: take its members out of whichever planned rosters held them.
+                        var formed = members.ToHashSet();
+                        var remaining = raid.ForcedParties.Select(p => p.Where(b => !formed.Contains(b)).ToArray())
+                            .Where(p => p.Length > 0).ToList();
+                        raid.ForcedParties.Clear();
+                        raid.ForcedParties.AddRange(remaining);
+                    }
+                    foreach (GameBot bot in members) Reservations.TryRemove(bot.DatabaseID, out _);
+                }
+            }
+        }
+
+        /// <summary>Keeps a party in its expedition when one member is released (unreachable hub route).
+        /// (Upstream 0.38c, port session S4; called in the RvR world only.)</summary>
+        public static void ReleasePartyMember(Group group, GameBot bot)
+        {
+            if (group == null || bot == null) return;
+            lock (Sync)
+            {
+                if (!Membership.TryGetValue(group, out Raid raid) || !raid.Parties.TryGetValue(group, out Party party)) return;
+                // Fork: the raid's battlegroup (RealmRaidBattleGroup) lets the released member go too.
+                RealmRaidBattleGroup.Detach(raid.Battle, [bot]);
+                party.Members = party.Members.Where(member => member != bot).ToArray();
+                party.CatchingUp.Remove(bot.DatabaseID);
+                raid.Released.Add(bot.DatabaseID);
+                raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Adds a replacement to a party that lost a member. It skips the muster attendance once
+        /// the raid has left the hub and walks to the party's destination like a late member.
+        /// (Upstream 0.38c, port session S4; called in the RvR world only.)
+        /// </summary>
+        public static bool AddReplacement(Group group, GameBot bot)
+        {
+            if (group == null || bot == null) return false;
+            lock (Sync)
+            {
+                if (!Membership.TryGetValue(group, out Raid raid) || !raid.Parties.TryGetValue(group, out Party party) ||
+                    !RealmRaidRecruitmentPolicy.NeedsReplacement(party.Target, party.Members.Length) ||
+                    raid.Support.Length >= RealmRaidRecruitmentPolicy.MaximumBots) return false;
+                party.Members = party.Members.Append(bot).ToArray();
+                if (raid.HubDeparted || raid.Started) party.CatchingUp.Add(bot.DatabaseID);
+                raid.Support = raid.Parties.Values.SelectMany(p => p.Members).Cast<GameLiving>().ToArray();
+                // Fork: the newcomer joins the raid's battlegroup like every member.
+                RealmRaidBattleGroup.Attach(raid.Battle, [bot]);
+                UpdateView(raid, party);
+                return true;
+            }
+        }
+
         public static bool TryGetForcedStaging(string id, out AutonomousBotGroupCoordinator.SharedCamp camp)
         {
             camp = null;
@@ -516,7 +734,17 @@ namespace DOL.GS
             {
                 if (!Raids.TryGetValue(id, out var raid) || raid.Parties.Count >= RealmRaidRecruitmentPolicy.MaximumParties) return false;
                 int slot = Enumerable.Range(0, RealmRaidRecruitmentPolicy.MaximumParties).First(i => raid.Parties.Values.All(p => p.FormationSlot != i));
-                if (!TryStaging(raid, slot, out _) || !TryHubPost(raid, slot, out var staging)) return false;
+                if (!TryStaging(raid, slot, out _) || !TryHubPost(raid, slot, out var staging))
+                {
+                    // Upstream 0.38c (port session S4, both worlds): say once a minute why no party can form.
+                    if (GameLoop.GameLoopTime >= raid.NextPostWarning)
+                    {
+                        raid.NextPostWarning = GameLoop.GameLoopTime + 60_000;
+                        RaidLog.Warn($"REALM_RAID_NO_MUSTER_POST event={id} hub=\"{raid.Hub.Name}\" slot={slot} parties={raid.Parties.Count} " +
+                                     $"staging={raid.StagingPosts.Count} hubPosts={raid.HubPosts.Count}");
+                    }
+                    return false;
+                }
                 camp = new($"realm-event-{id}", raid.Definition.Name, raid.Hub.Name,
                     raid.Hub.Region,
                     (int)staging.X, (int)staging.Y, (int)staging.Z, false, false, 50);
@@ -536,7 +764,7 @@ namespace DOL.GS
                     Reservations.GetValueOrDefault(b.DatabaseID) != id)) return false;
                 int slot = Enumerable.Range(0, RealmRaidRecruitmentPolicy.MaximumParties).First(i => raid.Parties.Values.All(p => p.FormationSlot != i));
                 if (!TryStaging(raid, slot, out var staging) || !TryHubPost(raid, slot, out var hubPost)) return false;
-                var party = new Party { Members = members, FormationSlot = slot, Staging = staging, HubPost = hubPost };
+                var party = new Party { Members = members, FormationSlot = slot, Staging = staging, HubPost = hubPost, Target = members.Length };
                 raid.Parties[group] = party;
                 Membership[group] = raid;
                 DefenseGroups[group] = 0;
@@ -624,11 +852,19 @@ namespace DOL.GS
                 ushort region = raid.Started ? raid.Definition.Region : route.Entrance.SourceRegion;
                 string target = raid.Started ? route.TargetName : raid.Definition.Name;
                 bool queued = false;
+                Vector3 front = destination;
                 if (raid.Started && !TryBattlePost(raid, party, destination, region, out destination))
                 {
                     queued = true;
                     region = party.Anchor.HasValue ? party.AnchorRegion : route.Entrance.SourceRegion;
                     destination = party.Anchor ?? party.Staging;
+                    // Far from the front, a party without a free post there walks to it anyway instead of waiting at its old
+                    // post: at Caer Sidi's final staging no post was free, every party waited where it stood, nobody came
+                    // near, and the front was moved back down after three minutes, twice (runs 22, 23).
+                    // (Upstream 0.38c, port session S4; RvR world. Fork: Camlann's dungeon raids keep waiting at their post.)
+                    if (WorldMode.IsRvr && region == raid.Definition.Region &&
+                        Vector3.DistanceSquared(destination, front) > QueuedApproachDistance * QueuedApproachDistance)
+                        destination = front;
                 }
                 party.DestinationView = new(raid.Definition.Id, queued ? "RAID — waiting for a clear formation post" : raid.Started ? "RAID — " + route.Status : "Raid rally",
                     new($"realm-event-{raid.Definition.Id}", target, raid.Definition.Name, region,
@@ -650,16 +886,29 @@ namespace DOL.GS
                     raid.Definition.Region, (int)point.X, (int)point.Y, (int)point.Z, false, false, raid.Boss.Level), hold);
         }
 
+        public const long FailedPostRetryMilliseconds = 30_000;
+        public const float QueuedApproachDistance = 2_500f;
+
         private static bool TryBattlePost(Raid raid, Party party, Vector3 center, ushort region, out Vector3 point)
         {
             if (party.Anchor.HasValue && party.AnchorRegion == region &&
                 Vector3.DistanceSquared(center, party.AnchorCenter) < 128 * 128)
             { point = party.Anchor.Value; return true; }
+            // Run 4 (2026-10-14): around Prince Abdin no post was free, and every party re-ran the full post search
+            // (about 300 path queries, 1-3 s) on every AI turn; 414 such turns averaged 1,026 ms.
+            // (Upstream 0.38c, port session S4, both worlds: the same search, at most every 30 seconds per spot.)
+            long now = GameLoop.GameLoopTime;
+            if (now < party.FailedPostUntil && Vector3.DistanceSquared(center, party.FailedPostCenter) < 128 * 128)
+            { point = default; return false; }
             Zone zone = WorldMgr.GetRegion(region)?.GetZone((int)center.X, (int)center.Y);
             Vector3[] occupied = raid.Parties.Values.Where(p => p != party && p.Anchor.HasValue && p.AnchorRegion == region)
                 .Select(p => p.Anchor.Value).ToArray();
             if (!RealmRaidFormation.TryResolve(PathfindingProvider.Instance, zone, center, party.FormationSlot, occupied, out point))
+            {
+                party.FailedPostCenter = center;
+                party.FailedPostUntil = now + FailedPostRetryMilliseconds;
                 return false;
+            }
             party.Anchor = point; party.AnchorRegion = region; party.AnchorCenter = center;
             return true;
         }
@@ -781,6 +1030,48 @@ namespace DOL.GS
             }
         }
 
+        /// <summary>
+        /// Where a raider who died inside a raid dungeon releases: the raid's muster hub (the town players bind at for it).
+        /// Run 14 (2026-10-16): epic dungeons have no bind point, so Caer Sidi's fallen released to Camelot and walked back
+        /// across the realm; 67 of the 300 were left inside when Bane of Hope reset at 37%.
+        /// (Upstream 0.38c, port session S4; GameBot calls it in the RvR world only.)
+        /// </summary>
+        public static bool TryRaidRelease(GameBot bot, out ushort region, out Point3D point)
+        {
+            region = 0; point = null;
+            Group group = bot?.Group;
+            if (group == null) return false;
+            lock (Sync)
+            {
+                if (!Membership.TryGetValue(group, out var raid) || raid.DungeonRoute == null || raid.Hub == null) return false;
+                region = raid.Hub.Region;
+                point = new Point3D((int)raid.Hub.Center.X, (int)raid.Hub.Center.Y, (int)raid.Hub.Center.Z);
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// The expedition's current front inside its dungeon: a navmesh floor point the
+        /// route planner has already proven connects to the next encounter. A member
+        /// stranded on a disconnected floor island regroups here instead of retrying
+        /// an impossible corridor for hours or being sent back to its capital.
+        /// (Upstream 0.38c, port session S4; the controller calls it in the RvR world only.)
+        /// </summary>
+        public static bool TryDungeonRegroupPoint(GameBot bot, out ushort region, out Vector3 point)
+        {
+            region = 0; point = default;
+            if (bot?.Group == null) return false;
+            lock (Sync)
+            {
+                if (!Membership.TryGetValue(bot.Group, out var raid) || raid.DungeonRoute == null || !raid.Started ||
+                    bot.CurrentRegionID != raid.Definition.Region)
+                    return false;
+                region = raid.Definition.Region;
+                point = raid.DungeonRoute.Front;
+                return true;
+            }
+        }
+
         public static GameLiving[] SupportMembers(GameBot bot)
         {
             Group group = bot?.Group;
@@ -832,13 +1123,38 @@ namespace DOL.GS
         public static IEnumerable<GameLiving> SupportPets(GameBot bot, int range)
         {
             if (!HasSharedSupport(bot)) yield break;
-            var visited = new HashSet<IControlledBrain>();
-            foreach (GameLiving owner in SupportMembers(bot))
-                foreach (GameNPC pet in BotGroupPetBuffTargets.AttachedTree(owner.ControlledBrain, owner, visited))
-                    if (pet.IsAlive && PvpCombatant.Resolve(pet) is GameLiving petOwner &&
-                        SupportMembers(bot).Contains(petOwner) && pet.CurrentRegionID == bot.CurrentRegionID &&
-                        bot.IsWithinRadius(pet, range))
-                        yield return pet;
+            GameLiving[] members = SupportMembers(bot);
+            foreach (GameNPC pet in AllSupportPets(members))
+                if (pet.IsAlive && PvpCombatant.Resolve(pet) is GameLiving petOwner &&
+                    members.Contains(petOwner) && pet.CurrentRegionID == bot.CurrentRegionID &&
+                    bot.IsWithinRadius(pet, range))
+                    yield return pet;
+        }
+
+        // Every healer of a 300-bot raid walked every member's pet tree on each heal check (95 MB of
+        // allocations in 40 s, run 8 trace). The pet list of one roster is now built at most once a
+        // second and shared; each healer only filters it by region and range.
+        // (Upstream 0.38c, port session S4, both worlds; the fork's owner filter above is unchanged.)
+        private sealed class PetCache { public long Until; public GameNPC[] Pets = []; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<GameLiving[], PetCache> SupportPetCache = new();
+
+        private static GameNPC[] AllSupportPets(GameLiving[] members)
+        {
+            if (members == null || members.Length == 0) return [];
+            PetCache cache = SupportPetCache.GetOrCreateValue(members);
+            long now = GameLoop.GameLoopTime;
+            lock (cache)
+            {
+                if (now < cache.Until) return cache.Pets;
+                var visited = new HashSet<IControlledBrain>();
+                var pets = new List<GameNPC>();
+                foreach (GameLiving owner in members)
+                    if (owner?.ControlledBrain != null)
+                        pets.AddRange(BotGroupPetBuffTargets.AttachedTree(owner.ControlledBrain, owner, visited));
+                cache.Pets = pets.ToArray();
+                cache.Until = now + 1_000;
+                return cache.Pets;
+            }
         }
 
         public static void CancelPendingForKeepDefense(GameBot bot)

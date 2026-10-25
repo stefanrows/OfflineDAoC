@@ -510,6 +510,12 @@ Agent sessions on items 45–48: take the role and context from
      upstream's starting level 4, keep-start texts, no guild keep defense in
      RvR; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "R6 fixes") implemented in
      source, real-client check pending.
+     Upstream port S4 (lord shield, no item loot from guards/bots/pets, group
+     travel pace, battleground siege announcements, dashboard muster lines,
+     raid refill/regroup fixes, forced raids supersede automatic rallies,
+     support-offense first-fight fix, upstream relic rule in Realm-1 with the
+     R3b temple rule gated to Camlann; [RVR_PORT_MAP.md](RVR_PORT_MAP.md)
+     "S4 done") implemented in source, real-client check pending.
      **Result (0.332.0-0.345.0):** the RvR world (`Realm-1`) is the default
      beside the Camlann PvP world, each in its own save, picked in the
      launcher's World dropdown with CREATE WORLD / RESET WORLD; realm rules,

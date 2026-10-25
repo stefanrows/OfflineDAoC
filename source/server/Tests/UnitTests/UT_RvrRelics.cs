@@ -15,10 +15,13 @@ using NUnit.Framework;
 namespace DOL.UnitTests;
 
 /// <summary>
-/// R3b of the RvR mode: relics on realm pads behind the 1.65 milegates, the
-/// realm-wide upstream bonus, relic guards by realm and the bot raid seams.
-/// Integration cases run in both worlds (spec section 9.2); Camlann keeps its
-/// guild relic answers.
+/// R3b of the RvR mode: relics on realm pads, the realm-wide upstream bonus,
+/// relic guards by realm and the bot raid seams. Port session S4 (owner
+/// decision 2026-10-25 22:20 #1): the RvR world follows upstream 0.38c, where
+/// the relic itself is the objective (no milegate seal, relic keeps captured
+/// like any keep); the R3b temple rule (milegate chains, pure cases below)
+/// belongs to Camlann (RvrRelicRules.TempleRulesApply). Integration cases run
+/// in both worlds (spec section 9.2); Camlann keeps its guild relic answers.
 /// </summary>
 [TestFixture, NonParallelizable]
 public sealed class UT_RvrRelics
@@ -311,7 +314,7 @@ public sealed class UT_RvrRelics
     // ---- through RelicMgr, both worlds ---------------------------------------
 
     [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
-    public void ARelicIsVulnerableOnlyBehindAFallenMilegate(WorldModelKind world)
+    public void InTheRvrWorldTheRelicIsTheObjectiveWithoutAMilegate(WorldModelKind world)
     {
         using var _ = BothWorlds.Use(world);
         FreshFrontier();
@@ -323,7 +326,9 @@ public sealed class UT_RvrRelics
         SetRelics([scabbard, hammer]);
         TestPlayer midgard = Player(eRealm.Midgard);
 
-        Assert.That(RelicMgr.CanPickupRelicFromShrine(midgard, scabbard), Is.False, "fresh world: sealed (Camlann: no guild keep)");
+        // Upstream 0.38c: no milegate; Midgard holds its own strength relic, so the scabbard can be lifted at once.
+        Assert.That(RelicMgr.CanPickupRelicFromShrine(midgard, scabbard), Is.EqualTo(BothWorlds.Expect(world, false, true)),
+            "fresh world: RvR open as upstream (Camlann: no guild keep)");
 
         Keep(Benowyc, eRealm.Midgard, eRealm.Albion);
         Keep(Berkstead, eRealm.Hibernia, eRealm.Albion);
@@ -332,7 +337,7 @@ public sealed class UT_RvrRelics
         Assert.Multiple(() =>
         {
             Assert.That(RelicMgr.CanPickupRelicFromShrine(midgard, scabbard), Is.EqualTo(BothWorlds.Expect(world, false, true)),
-                "Camlann keeps its guild rule; RvR opens the temple");
+                "Camlann keeps its guild rule");
             Assert.That(RelicMgr.CanPickupRelicFromShrine(Player(eRealm.Albion), scabbard), Is.False, "never from the own pad");
             Assert.That(RelicMgr.CanPickupRelicFromShrine(midgard, hammer), Is.False);
         });
@@ -340,8 +345,10 @@ public sealed class UT_RvrRelics
         if (world == WorldModelKind.Realm)
         {
             Keep(Berkstead, eRealm.Albion, eRealm.Albion);
-            Assert.That(RelicMgr.CanPickupRelicFromShrine(midgard, scabbard), Is.False, "Albion retook Berkstead: sealed again");
-            Assert.That(RelicMgr.GetRvrPickupRefusal(midgard, scabbard), Does.Contain("Caer Berkstead").Or.Contain("keep 51"));
+            Assert.That(RelicMgr.CanPickupRelicFromShrine(midgard, scabbard), Is.True, "no milegate reseals the temple");
+            Assert.That(RelicMgr.GetRvrPickupRefusal(midgard, scabbard), Is.Null);
+            Assert.That(RelicMgr.GetRvrPickupVerdict(midgard, scabbard, _ => eRealm.Albion), Is.EqualTo(RvrRelicRules.PickupVerdict.Allowed),
+                "every milegate keep Albion's: still open in the RvR world");
         }
     }
 
@@ -432,7 +439,7 @@ public sealed class UT_RvrRelics
     // ---- bot raid seams --------------------------------------------------------
 
     [TestCaseSource(typeof(BothWorlds), nameof(BothWorlds.All))]
-    public void ArmiesRaidOnlyEnemyTemplesWithAnOpenMilegate(WorldModelKind world)
+    public void ArmiesRaidEnemyTemplesHoldingALiftableRelic(WorldModelKind world)
     {
         using var _ = BothWorlds.Use(world);
         FreshFrontier();
@@ -447,7 +454,8 @@ public sealed class UT_RvrRelics
 
         Assert.That(RelicMgr.GetTemplePad(excalibur), Is.SameAs(albStrength));
         Assert.That(RelicMgr.GetTemplePad(_keeps.GetKeepByID(Benowyc)), Is.Null, "not a relic keep");
-        Assert.That(RelicMgr.IsRelicRaidTarget(excalibur, WorldBot(eRealm.Midgard)), Is.False, "sealed");
+        Assert.That(RelicMgr.IsRelicRaidTarget(excalibur, WorldBot(eRealm.Midgard)), Is.EqualTo(BothWorlds.Expect(world, false, true)),
+            "no milegate in the RvR world (upstream 0.38c); Camlann keeps relic raids off");
 
         foreach (int id in new[] { Benowyc, Berkstead, Boldiam })
             Keep(id, eRealm.Midgard, eRealm.Albion);
@@ -457,31 +465,29 @@ public sealed class UT_RvrRelics
             Assert.That(RelicMgr.IsRelicRaidTarget(excalibur, WorldBot(eRealm.Midgard)), Is.EqualTo(BothWorlds.Expect(world, false, true)),
                 "Camlann keeps relic raids off");
             Assert.That(RelicMgr.IsRelicRaidTarget(excalibur, WorldBot(eRealm.Albion)), Is.False, "never the own temple");
-            Assert.That(RelicMgr.IsRelicRaidTarget(mjollner, WorldBot(eRealm.Albion)), Is.False, "Midgard's milegate stands");
+            Assert.That(RelicMgr.IsRelicRaidTarget(mjollner, WorldBot(eRealm.Albion)), Is.EqualTo(BothWorlds.Expect(world, false, true)),
+                "Albion holds its own strength relic, so Midgard's temple is a target (no milegate)");
             Assert.That(RelicMgr.IsRelicRaidTarget(excalibur, WorldBot(eRealm.Hibernia)), Is.False,
                 "Hibernia holds no strength relic of its own here");
         });
     }
 
-    // ---- relic temples are not captured ------------------------------------------
+    // ---- relic keeps are captured like any keep (upstream, RvR world) ----------
 
     [Test]
-    public void ARelicTempleIsNeverCapturedByARealm()
+    public void ARelicKeepIsCapturedLikeAnyKeepInTheRvrWorld()
     {
-        using var _ = BothWorlds.Use(WorldModelKind.Realm);
-        FreshFrontier();
-        UseServer(WorldModelKind.Realm);
-        AbstractGameKeep excalibur = _keeps.GetKeepByID(Excalibur);
-
-        Assert.That(PvpKeepCampaign.RealmCaptureApplies(true), Is.False);
-        Assert.That(PvpKeepCampaign.RealmCaptureApplies(false), Is.True);
-        Assert.That(PvpKeepCampaign.CaptureForRealm(excalibur, eRealm.Midgard, WorldBot(eRealm.Midgard)), Is.False);
-        Assert.That(excalibur.Realm, Is.EqualTo(eRealm.Albion), "the temple stays its realm's");
-        Assert.That(excalibur.DBKeep.LordDefeated, Is.False, "no steward, no claim");
+        Assert.Multiple(() =>
+        {
+            Assert.That(PvpKeepCampaign.RealmCaptureApplies(WorldModelKind.Realm, true), Is.True, "upstream 0.38c: relic keeps change hands");
+            Assert.That(PvpKeepCampaign.RealmCaptureApplies(WorldModelKind.Realm, false), Is.True);
+            Assert.That(PvpKeepCampaign.RealmCaptureApplies(WorldModelKind.Camlann, true), Is.False, "the R3b temple rule is Camlann's");
+            Assert.That(PvpKeepCampaign.RealmCaptureApplies(WorldModelKind.Camlann, false), Is.True);
+        });
     }
 
-    [TestCase(WorldModelKind.Realm, true, eRealm.None, eRealm.Albion, eRealm.Albion, TestName = "A realm-less temple row takes its original realm")]
-    [TestCase(WorldModelKind.Realm, true, eRealm.Midgard, eRealm.Albion, eRealm.Albion, TestName = "A temple flipped under 0.337.0 returns to its realm")]
+    [TestCase(WorldModelKind.Realm, true, eRealm.None, eRealm.Albion, null, TestName = "A realm-less temple row is left as it is (upstream)")]
+    [TestCase(WorldModelKind.Realm, true, eRealm.Midgard, eRealm.Albion, null, TestName = "A captured relic keep keeps its captor (upstream)")]
     [TestCase(WorldModelKind.Realm, true, eRealm.Albion, eRealm.Albion, null, TestName = "A temple of its realm stays as it is")]
     [TestCase(WorldModelKind.Realm, false, eRealm.Midgard, eRealm.Albion, null, TestName = "An ordinary captured keep keeps its captor")]
     [TestCase(WorldModelKind.Camlann, true, eRealm.Midgard, eRealm.Albion, null, TestName = "Camlann leaves the temple row alone")]

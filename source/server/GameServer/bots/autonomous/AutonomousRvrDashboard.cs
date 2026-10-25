@@ -80,7 +80,10 @@ public static class AutonomousRvrDashboard
                         keep.CurrentRegion.Time - keep.LastAttackedByEnemyTick < 120_000) ||
                         keep.Guards.Values.Any(guard => guard.IsAlive && guard.LastAttackedByEnemyTick > 0 && guard.InCombat);
                     string forces = FormatForces(battle);
-                    string owner = keep.Guild?.Name ?? (keep.DBKeep.LordDefeated ? "Awaiting guild claim" : "Unclaimed");
+                    // RvR world (upstream 0.38c, port session S4): the keep's realm, which the launcher's realm filter
+                    // reads. Fork: Camlann shows the guild owner.
+                    string owner = WorldMode.IsRvr ? GlobalConstants.RealmToName(keep.Realm)
+                        : keep.Guild?.Name ?? (keep.DBKeep.LordDefeated ? "Awaiting guild claim" : "Unclaimed");
                     return new Objective(keep.IsRelic ? "Relic keep" : "Keep", keep.Name, owner,
                         battle?.Kind ?? (attacked ? "Under attack — no organized siege" : "Secure"), keep.CurrentRegion.Description,
                         "", forces, $"rvr-keep-{keep.KeepID}",
@@ -92,10 +95,10 @@ public static class AutonomousRvrDashboard
                 GameLiving carrier = relic.CurrentCarrier;
                 long remaining = AutonomousRvrEventLayer.CarrierRemainingMilliseconds(
                     AutonomousRvrEventLayer.RelicCarrierTargetId(relic), GameLoop.GameLoopTime);
-                // RvR world (R3b): relics belong to realms, shown by the carrier's or the temple's realm.
+                // RvR world (upstream 0.38c; port session S4 retired the R3b carrier-realm display there): the relic's
+                // realm. Fork: Camlann shows the carrier's guild, the keep mount's guild or the shrine garrison.
                 string relicOwner = WorldMode.IsRvr
-                    ? carrier != null ? GlobalConstants.RealmToName(DOL.GS.ServerRules.PvpCombatant.AllianceRealm(carrier))
-                        : relic.IsMounted ? GlobalConstants.RealmToName(relic.Realm) : "In transit"
+                    ? relic.Realm == eRealm.None ? "In transit" : GlobalConstants.RealmToName(relic.Realm)
                     : carrier != null ? DOL.GS.ServerRules.PvpCombatant.GuildOf(carrier)?.Name ?? carrier.Name
                     : relic.CurrentRelicPad is GameKeepRelicPad pad ? pad.Guild?.Name ?? "Unclaimed"
                     : relic.IsMounted ? PvpKeepCampaign.GarrisonName : "In transit";
@@ -154,13 +157,32 @@ public static class AutonomousRvrDashboard
                $"{GlobalConstants.RealmToName(battle.Defender)}: {battle.PresentDefenders}/{battle.CapPerRealm} ({battle.Defenders})\n" +
                $"{GlobalConstants.RealmToName(thirdRealm)}: {battle.PresentThirdRealm}/{battle.CapPerRealm} ({battle.ThirdRealm})\n" +
                "Attackers prepare first; opposing realms respond to actual fighting\n" +
-               $"Preparation: {Math.Max(0, (int)remaining.TotalHours)}h {remaining.Minutes:00}m left";
+               MusterLines(battle.MusterRemainingMilliseconds, remaining, WorldMode.IsRvr);
     }
+
+    /// <summary>
+    /// The muster and window lines of a rally that has not started its battle. RvR world (upstream 0.38c, port
+    /// session S4): "Gathering: marching in 6m" while the army musters, "Marching to the keep" once it marches, then
+    /// the attack window on its own line. Fork: Camlann has no muster stage (-1) and keeps its "Preparation" line.
+    /// </summary>
+    public static string MusterLines(long musterRemainingMilliseconds, TimeSpan remaining, bool rvrWorld) =>
+        rvrWorld
+            ? (musterRemainingMilliseconds > 0
+                  ? $"Gathering: marching in {Math.Max(1, (int)Math.Ceiling(musterRemainingMilliseconds / 60_000d))}m\n"
+                  : musterRemainingMilliseconds == 0 ? "Marching to the keep\n" : "") +
+              $"Attack window: {Math.Max(0, (int)remaining.TotalHours)}h {remaining.Minutes:00}m left (present = at the keep)"
+            : $"Preparation: {Math.Max(0, (int)remaining.TotalHours)}h {remaining.Minutes:00}m left";
 
     private static void OnKeepTaken(DOLEvent e, object sender, EventArgs args)
     {
         if (args is KeepEventArgs { Keep: not null } taken)
+        {
+            // Every capture, frontier and battleground alike (battleground keeps had no capture line at all).
+            DOL.Logging.LoggerManager.Create(typeof(AutonomousRvrDashboard)).Info(
+                $"RVR_KEEP_TAKEN keep=\"{taken.Keep.Name}\" id={taken.Keep.KeepID} region={taken.Keep.Region} " +
+                $"realm={GlobalConstants.RealmToName(taken.Keep.Realm)} battleground={BattlegroundBrackets.IsBattlegroundRegion(taken.Keep.Region)}");
             AutonomousRvrEventLayer.EndTarget($"rvr-keep-{taken.Keep.KeepID}", GameLoop.GameLoopTime, taken.Keep.Realm);
+        }
     }
 
     private static void OnRelicChanged(DOLEvent e, object sender, EventArgs args)

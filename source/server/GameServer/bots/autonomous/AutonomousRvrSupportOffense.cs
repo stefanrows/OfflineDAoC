@@ -51,6 +51,15 @@ public static class AutonomousRvrSupportOffense
     /// <summary>A support bot without a turn for this long starts a new fight (new roll).</summary>
     public const int FightGapMilliseconds = 20_000;
 
+    /// <summary>
+    /// Whether this support turn starts a new fight (and its own "stays on heals" roll). A bot that never had a
+    /// turn (<paramref name="lastTurn"/> at long.MinValue) starts one: `now - long.MinValue` overflows to a
+    /// negative number, so the first fight of every bot skipped its roll (same pattern as the R6 event-layer
+    /// expiry fix, docs/RVR_PORT_MAP.md "S4 done").
+    /// </summary>
+    public static bool StartsNewFight(long now, long lastTurn) =>
+        lastTurn == long.MinValue || now - lastTurn > FightGapMilliseconds;
+
     public static RvrSupportStyle StyleOf(eCharacterClass characterClass, eSpecType spec) => (characterClass, spec) switch
     {
         (eCharacterClass.Cleric, eSpecType.SmiteCleric) => RvrSupportStyle.Offensive,

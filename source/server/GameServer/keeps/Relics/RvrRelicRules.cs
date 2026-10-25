@@ -5,11 +5,23 @@ using DOL.GS.ServerRules;
 namespace DOL.GS
 {
     /// <summary>
-    /// Relic rules of the RvR world (save marker Realm-1, package R3b,
-    /// docs/RVR_RELICS.md). Pure functions on realms and keep owners so the
-    /// rules are testable without a running world; <see cref="RelicMgr"/>
-    /// feeds them the live relics, pads and keeps.
+    /// Relic rules on realms (package R3b, docs/RVR_RELICS.md). Pure functions
+    /// on realms and keep owners so the rules are testable without a running
+    /// world; <see cref="RelicMgr"/> feeds them the live relics, pads and keeps.
     ///
+    /// World split (owner decision 2026-10-25 22:20 #1, port session S4): the
+    /// RvR world (save marker Realm-1) follows upstream 0.38c, where the relic
+    /// itself is the objective: no milegate seal, the relic keeps can be taken
+    /// like any keep, and the pickup keeps upstream's own-relic rule and pad
+    /// crowd (<see cref="Pickup"/> with an open temple, <see cref="BonusModifier"/>).
+    /// The R3b temple rule below (milegate seal, temples never captured, temple
+    /// guards of the temple's realm) belongs to Camlann only
+    /// (<see cref="TempleRulesApply"/>). Camlann's live relic flow is still its
+    /// guild rule (RelicMgr.CanPickupRelicFromShrine, guild keep mounts), which
+    /// does not consult the milegate chains, so the R3b temple rule is dormant
+    /// in both worlds until it is wired into Camlann's guild relics.
+    ///
+    /// R3b temple rule:
     /// The six relics sit on the realm pads in the six relic temples (relic
     /// keeps). A relic is guarded by its temple's milegate: the temple stands
     /// open to the enemy only while every keep of its first milegate chain is
@@ -40,6 +52,13 @@ namespace DOL.GS
 
         /// <summary>The pad crowd needed in the running world.</summary>
         public static int PlayersRequiredOnPad() => PlayersRequiredOnPad(WorldMode.Current);
+
+        /// <summary>
+        /// Whether the R3b temple rule (milegate seal, relic temples never captured, temple guards by temple realm)
+        /// applies in <paramref name="world"/>: Camlann only (owner decision 2026-10-25 22:20 #1). The RvR world runs
+        /// upstream 0.38c's relic rules, where the relic itself is the objective.
+        /// </summary>
+        public static bool TempleRulesApply(WorldModelKind world) => world == WorldModelKind.Camlann;
 
         /// <summary>The milegate chain that guards one relic temple.</summary>
         /// <param name="Realm">The temple's realm (the pad's realm).</param>

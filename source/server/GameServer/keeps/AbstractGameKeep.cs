@@ -590,7 +590,8 @@ namespace DOL.GS.Keeps
 
 		public virtual void EnsureRelicPad()
 		{
-			// RvR world (R3b): relics mount only on the realm pads of the relic temples, never in a guild's keep.
+			// RvR world: relics mount only on the realm pads of the relic temples, never in a guild's keep (upstream 0.38c has
+			// no guild keep mounts).
 			if (WorldMode.IsRvr || IsPortalKeep || BattlegroundCampaignCatalog.Find((ushort)Region) != null || Guild == null || PvpKeepCampaign.IsGarrison(Guild) || RelicPad != null)
 				return;
 

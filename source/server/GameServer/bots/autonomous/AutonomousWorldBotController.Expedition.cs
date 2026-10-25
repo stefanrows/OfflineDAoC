@@ -135,4 +135,36 @@ public sealed partial class AutonomousWorldBotController
         else SetStatus(bot,"Traveling to dragon rally",order.Camp.MonsterName,"Following a checked route outside the dragon's aggro area");
         return true;
     }
+
+    // Consecutive expedition route failures from (nearly) the same floor point.
+    // A member on a disconnected navmesh island (a ledge, a fall, a bad respawn
+    // landing) cannot path to any route stage; it used to retry every 30 seconds
+    // for the whole four-hour expedition. (Upstream 0.38c, port session S4; called in the RvR world only.)
+    public const int StrandedExpeditionFailureLimit = 3;
+    public const float StrandedExpeditionRadius = 400;
+    private int _strandedExpeditionFailures;
+    private Vector3 _strandedExpeditionPosition;
+
+    public static bool ShouldRegroupStrandedMember(int failures, bool alive, bool inCombat) =>
+        alive && !inCombat && failures >= StrandedExpeditionFailureLimit;
+
+    private void TryRegroupStrandedExpeditionMember(GameBot bot)
+    {
+        Vector3 here = new(bot.X, bot.Y, bot.Z);
+        _strandedExpeditionFailures = Vector2.DistanceSquared(new(here.X, here.Y),
+            new(_strandedExpeditionPosition.X, _strandedExpeditionPosition.Y)) <= StrandedExpeditionRadius * StrandedExpeditionRadius
+            ? _strandedExpeditionFailures + 1 : 1;
+        _strandedExpeditionPosition = here;
+        if (!ShouldRegroupStrandedMember(_strandedExpeditionFailures, bot.IsAlive, bot.InCombat) ||
+            !AutonomousRealmRaid.TryDungeonRegroupPoint(bot, out ushort region, out Vector3 front) ||
+            Vector3.DistanceSquared(here, front) <= 300 * 300)
+            return;
+        _strandedExpeditionFailures = 0;
+        if (!bot.MoveInRegion(region, (int)front.X, (int)front.Y, (int)front.Z, bot.Heading, true))
+            return;
+        _expeditionRouteRetry = 0;
+        AutonomousStuckWatchdog.MarkProgress(bot, eAutonomousProgressKind.Recovery);
+        Log.Warn($"REALM_EXPEDITION_STRANDED_REGROUP bot={bot.Name} id={bot.DatabaseID} region={region} " +
+                 $"from={(int)here.X},{(int)here.Y},{(int)here.Z} to={(int)front.X},{(int)front.Y},{(int)front.Z}");
+    }
 }

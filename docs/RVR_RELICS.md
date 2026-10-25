@@ -7,6 +7,18 @@ while RvR may follow the newer upstream); spec
 `docs/superpowers/specs/2026-10-24-rvr-mode-design.md` section 4.3. Status:
 implemented in source, real-client check pending.
 
+**Superseded in the RvR world by port session S4** (owner decision 2026-10-25
+22:20 #1, [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S4 done"): Realm-1 now runs
+upstream 0.38c's relic rule, where the relic itself is the objective. No
+milegate seals a temple (condition 2 below and the milegate examine and
+refusal lines are gone there), relic keeps are captured like any keep and
+keep their captor at start, and the stock relic guards follow upstream's
+rule. Conditions 1 and 3, the pad crowd, the bonus, the delivery pad and the
+bot relic raids by realm stay as described. The temple rule is gated to
+Camlann (`RvrRelicRules.TempleRulesApply`), where it is dormant because
+Camlann's relics follow the guild rule (last section); wiring it into
+Camlann is an owner decision.
+
 Everything below applies to the RvR world (save marker `Realm-1`). The
 Camlann world (`Camlann-1`) keeps its guild relics unchanged (CAMLANN.md
 decision 3); the last section compares the two.

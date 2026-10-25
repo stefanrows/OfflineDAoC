@@ -58,7 +58,11 @@ The rules every change must keep. Task 147, plan
    per realm, level 50 for every siege, muster at the own portal outpost,
    march column with push and detour, siege engines and resurrection, defense
    rally, retake, relic pad 8, realm raids per realm, town teleporters, route
-   threat awareness, keep level 4 after a capture and 5 after a claim.
+   threat awareness, keep level 4 after a capture and 5 after a claim. Since
+   port session S4 also upstream's relic rule (no milegate; relic keeps are
+   captured like any keep), the lord shield, no item loot from guards, bots
+   and pets, the group travel pace, battleground siege announcements and the
+   raid refill fixes ([RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S4 done").
 7. **Fork features that stay in the RvR world.** Companions (roster, squads,
    gear, companion ML), Trials of Atlantis and Master Levels (bot ML too),
    Realm Exchange (own realm), enemy name masking through `RvrServerRules`,

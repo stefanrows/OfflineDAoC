@@ -3174,7 +3174,9 @@ namespace DOL.GS
 					m_respawnTimer.Callback = new ECSGameTimer.ECSTimerCallback(RespawnTimerCallback);
 				}
 
-				m_respawnTimer.Start(RespawnInterval);
+				// Upstream 0.38c (port session S4): ordinary monsters stay down longer while a bot raid is inside (inert
+				// until the neutral raids are ported, see AutonomousRealmRaid.RaidRespawnInterval).
+				m_respawnTimer.Start(AutonomousRealmRaid.RaidRespawnInterval(this, RespawnInterval));
 			}
 		}
 

@@ -1315,6 +1315,15 @@ namespace DOL.GS
                     ? BotReleaseBindPoints.Nearest(_deathRegionId, _deathLocation.X, _deathLocation.Y, Realm, safeOnly: true)
                     : FindNearestBindPoint();
             ushort releaseRegion = _deathRegionId;
+            // RvR world (upstream 0.38c, port session S4): a raider who died in its raid's dungeon, where no bind point
+            // stands, releases at the raid's muster hub (the town players bind at for it) instead of its home bind.
+            // Fork: Camlann keeps the PvE bind release (bug 144).
+            if (WorldMode.IsRvr && pveBindRelease && returnToParty && FindNearestBindPoint() == null &&
+                AutonomousRealmRaid.TryRaidRelease(this, out ushort raidHubRegion, out Point3D raidHub))
+            {
+                (releaseRegion, release) = (raidHubRegion, raidHub);
+                releaseReason = "raid-hub";
+            }
             // RvR world actors recover at a hub after either PvP or PvE death:
             // a grouped one at its group's hub (cross-realm groups muster at the
             // leader's), otherwise, or if that fails, at its own.

@@ -204,36 +204,48 @@ defaults in code, keep/relic start state from the reset.
 
 ### S4 backlog (upstream 0.38c, not ported yet; RvR world only)
 
-- [ ] **Lord shield.** Upstream Lord.cs: the lord cannot be hurt while the
-  gate and keep door stand (merge against R3a).
-- [ ] **No item loot from guards, gamebots and their pets** (upstream
-  AbstractServerRules; check the fork's own rule first).
-- [ ] **AutonomousGroupPace** (upstream group travel pace).
-- [ ] **Battleground siege announcements** (left out of the S1 event layer;
-  needs BattlegroundBrackets, in since S3).
-- [ ] **Dashboard muster column** (AutonomousRvrDashboard MERGE: "marching in
-  6m", attack window).
+- [x] **Lord shield.** Upstream Lord.cs: the lord cannot be hurt while the
+  gate and keep door stand (merge against R3a). S4: RvR world only (Camlann
+  keeps its own targeting rule); implemented in source, real-client check pending.
+- [x] **No item loot from guards, gamebots and their pets** (upstream
+  AbstractServerRules; check the fork's own rule first). S4: verbatim, both
+  worlds (the fork only skipped autonomous bot victims); implemented in source.
+- [x] **AutonomousGroupPace** (upstream group travel pace). S4: RvR world
+  only (it replaces Camlann's cohesion hold and follow speed); implemented in source.
+- [x] **Battleground siege announcements** (left out of the S1 event layer;
+  needs BattlegroundBrackets, in since S3). S4: verbatim in the RvR layer, keep
+  takes follow the RvR announcement switch; implemented in source.
+- [x] **Dashboard muster column** (AutonomousRvrDashboard MERGE: "marching in
+  6m", attack window). S4: RvR lines plus realm owners; Camlann text
+  unchanged; launcher unchanged (no column change upstream); implemented in source.
 - [ ] **Darkness Falls route + neutral raids** (RealmRaidDungeonRoute, DF
   navigation, RealmRaidNeutralEvents, multi-hub musters). Needs certified DF
   proofs regenerated on our patched `zone249.nav`; upstream's proofs belong to
   its mesh.
 - [ ] **Opt-in battleground goal** (upstream "Battlegrounds %", default 0 %).
   Owner decision first: one RvR-only setting plus the upstream executor.
-- [ ] **Upstream raid refill/regroup fixes** (refill short parties, release at
+- [x] **Upstream raid refill/regroup fixes** (refill short parties, release at
   the raid hub, dungeon regroup point, slower trash respawn while a raid is
-  inside, pooled forced parties, failed-post retry).
-- [ ] **SupersedeAutomatic for forced raids** (a forced expedition ends the
-  realm's unstarted automatic rallies).
-- [ ] **BotBrain.SupportOffense MinValue overflow.** `_supportLastTurn` starts
+  inside, pooled forced parties, failed-post retry). S4: RvR-branched, the
+  post retry and pet cache in both worlds; the trash respawn is inert until the
+  neutral raids come; implemented in source.
+- [x] **SupersedeAutomatic for forced raids** (a forced expedition ends the
+  realm's unstarted automatic rallies). S4: RvR world, with the forced dungeon
+  entrance pre-check; implemented in source.
+- [x] **BotBrain.SupportOffense MinValue overflow.** `_supportLastTurn` starts
   at `long.MinValue`, so a bot's first fight skips its per-fight roll. Camlann
-  wave (off in Realm-1); same pattern as the R6 expiry fix.
+  wave (off in Realm-1); same pattern as the R6 expiry fix. S4: fixed in both
+  worlds; implemented in source.
 - [ ] **Fork extensions.** Owner picks extensions from
   [RVR_FORK_EXTENSIONS.md](RVR_FORK_EXTENSIONS.md) to integrate (what the RvR
   world is missing compared with Camlann; built properly into the upstream
   flow, one at a time with a live check).
-- [ ] **Upstream relic rules in Realm-1, retire R3b there** (owner decision 1
+- [x] **Upstream relic rules in Realm-1, retire R3b there** (owner decision 1
   below): the relic itself is the objective as upstream; the R3b temple-pad
-  rule (milegate keeps, own relic of the type) stays for Camlann only.
+  rule (milegate keeps, own relic of the type) stays for Camlann only. S4: no
+  milegate and capturable relic keeps in Realm-1; the temple rule is gated to
+  Camlann, where it stays dormant (Camlann's relics are guild relics; wiring
+  it in is an owner decision); implemented in source.
 - [ ] **Frontier porters adapted to RvR** (owner decision 2 below): keep the
   fork's porters and frontier transport, realm-bound, serving only the own
   realm's frontier.
@@ -379,3 +391,4 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-25 23:20 live at 20x (achieved 4.5-6x, ~2 game hours): three sieges ran the full upstream chain: roll -> parties -> muster at the outpost -> march (72/99/61) -> arrival -> gate work (ballista/ram slots, 2,132 RVR_SIEGE_GATE) -> **two keeps captured** (rvr-keep-101 19:36, rvr-keep-52 19:45). Defects: defenders never muster (RVR_DEFENSE_MARCH mustered=0, 14), stragglers (64 RVR_RALLY_DELAY, solo deaths), present=0/0/0 at RVR_SIEGE_STARTED (bug 178, agent running); open BG driver Clamp crash with level-50 bots (bug 179). No Unhandled, 3 ERR in 20 min.
 - 2026-10-26 00:40: bugs 178/179 fixed and merged as 0.346.0 (two fork re-task rules off in Realm-1, open BG pace clamp, open BG off by default in Realm-1 per owner). Defense "mustered=0" verified as upstream rule; owner decision pending: keep original or add rally after battle start. Deploy + restart next.
 - 2026-10-26 00:45 owner decision on keep defence (approved fork addition on top of upstream): "eine Kombi aus beiden": (1) a freshly captured keep is secured for a while by part of the capturing force (not everyone stays, not forever); (2) when an own keep comes under attack, defenders go there deliberately (defence rally also after battle start, as the player-defence rule does). S4 item "Defence combo" - build in a later session, measure against upstream's capture rate (22 of 24 tonight).
+- 2026-10-26 10:30: Port S4 merged as 0.347.0 (lord shield, no item loot from guards/bots/pets, AutonomousGroupPace, BG siege announcements, dashboard muster column + realm owners, upstream raid refill/regroup fixes, SupersedeAutomatic, SupportOffense overflow, upstream relic rule in Realm-1 with R3b gated to Camlann/dormant). Server 5,167 passed / 7 bug-160. Not deployed yet. Open: DF route + neutral raids (DF proofs), opt-in BG goal (owner), defence combo + frontier porters (fork additions), small upstream leftovers in RVR_PORT_MAP "Not done in S4".

@@ -30,7 +30,7 @@ namespace DOL.GS.GameEvents
             // shrines. The stock relic guards take the stale keep realm (often
             // None), spawn as level-66 "Renegade" Jarls/Knights/Sentinels that
             // attack every realm, and chase bots onto the border bind stones.
-            // RvR world (R3b): the realm relic temples keep their stock guards, of the temple's realm.
+            // RvR world: the realm relic temples keep their stock guards, as upstream's Normal rules.
             if (!ShouldRun(GameServer.ServerRules is PvPServerRules, WorldMode.IsRvr))
             {
                 log.Info("RELIC_GUARDS_DISABLED reason=camlann");
@@ -228,8 +228,11 @@ namespace DOL.GS.GameEvents
                 GuardFighterRK guard2 = guardPair.Guard2;
                 string guardName = guardPair.Name;
 
-                // RvR world (R3b): a guard whose temple is not its realm's (realm-less or captured) stays away.
-                if (WorldMode.IsRvr)
+                // R3b temple rule: a guard whose temple is not its realm's (realm-less or captured) stays away. Port
+                // session S4: the RvR world follows upstream 0.38c (a relic keep is taken like any keep, its guards stand
+                // while their frontier keep is its realm's); the temple rule belongs to Camlann
+                // (RvrRelicRules.TempleRulesApply), where the relic guard system is off (bug 146), so it is dormant.
+                if (WorldMode.IsRvr && RvrRelicRules.TempleRulesApply(WorldMode.Current))
                 {
                     guard1 = RvrTempleGuard(guard1, $"{guardName}(1)", ref addedGuardsCount);
                     guard2 = RvrTempleGuard(guard2, $"{guardName}(2)", ref addedGuardsCount);

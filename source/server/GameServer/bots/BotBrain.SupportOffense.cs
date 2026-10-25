@@ -95,7 +95,7 @@ namespace DOL.AI.Brain
                 return false;
 
             long now = GameLoop.GameLoopTime;
-            if (now - _supportLastTurn > AutonomousRvrSupportOffense.FightGapMilliseconds)
+            if (AutonomousRvrSupportOffense.StartsNewFight(now, _supportLastTurn))
             {
                 // One "stays on heals anyway" roll per fight, not per tick.
                 _supportRoll = Util.RandomDouble();

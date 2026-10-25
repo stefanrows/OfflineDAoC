@@ -144,6 +144,9 @@ namespace DOL.GS.Keeps
 		/// <param name="capturingrealm">The realm that captured the keep</param>
 		public static void BroadcastKeepTakeMessage(string message, eRealm capturingrealm)
 		{
+			// RvR world (upstream 0.38c, port session S4): the launcher's RvR and battleground announcements switch.
+			// Fork: Camlann announces every take as before.
+			if (WorldMode.IsRvr && !GameWideAnnouncements.Enabled(AnnouncementKind.RvrBattleground)) return;
 			foreach (GamePlayer player in ClientService.Instance.GetPlayers())
 			{
 				player.Out.SendMessage(message, eChatType.CT_Important, eChatLoc.CL_SystemWindow);

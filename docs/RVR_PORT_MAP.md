@@ -1,16 +1,17 @@
 # RVR_PORT_MAP: upstream RvR bot layer vs fork (for R4c)
 
-**Status 2026-10-25 21:45.** S1-S3 and the R6 review fixes are merged as 0.342.0-0.345.0 (S1 0.342.0, S2 0.343.0,
+**Status 2026-10-25 23:30.** S1-S3 and the R6 review fixes are merged as 0.342.0-0.345.0 (S1 0.342.0, S2 0.343.0,
 S3 0.344.0, R6 fixes 0.345.0) and deployed on the owner's PC on a fresh level-50 RvR world; R4c is closed, R6 waits for
-the live observation of the first sieges and the owner's real-client check. Camlann keeps the fork flow. Not ported
-(S4 backlog, [RVR_MODE_PLAN.md](RVR_MODE_PLAN.md)): lord shield, no item loot from guards/gamebots/pets,
-AutonomousGroupPace, battleground siege announcements, dashboard muster column, DF route + neutral raids (needs DF proofs
-for our mesh), opt-in battleground goal (owner), the remaining raid refill/regroup fixes, `SupersedeAutomatic`, the
-`BotBrain.SupportOffense` MinValue overflow. Owner decisions 2026-10-25 22:20: upstream relic rules in Realm-1 (R3b to
-Camlann only, S4), fork frontier porters kept and adapted to RvR (S4), task mix / warband composition original by default,
-PvP release immunity kept. What the RvR world is missing compared with Camlann (the
+the live observation of the first sieges and the owner's real-client check. Camlann keeps the fork flow. Port session S4
+(worktree branch `rvr-port-s4`, implemented in source, real-client check pending; "S4 done" below) ported the lord
+shield, no item loot from guards/gamebots/pets, AutonomousGroupPace, the battleground siege announcements, the dashboard
+muster lines, the raid refill/regroup fixes, `SupersedeAutomatic`, the `BotBrain.SupportOffense` MinValue fix, and
+upstream's relic rule in Realm-1 (owner decision 2026-10-25 22:20 #1). Still not ported ("Not done in S4"): DF route +
+neutral raids (needs DF proofs for our mesh), the opt-in battleground goal (owner), the frontier porter adaptation, the
+fork extensions list. Owner decisions 2026-10-25 22:20: fork frontier porters kept and adapted to RvR, task mix / warband
+composition original by default, PvP release immunity kept. What the RvR world is missing compared with Camlann (the
 fork extensions gated off in Realm-1): [RVR_FORK_EXTENSIONS.md](RVR_FORK_EXTENSIONS.md). Sections 0-5 below are the read-only analysis of 0.341.0;
-sections 6, 7, "S3 done" and "R6 fixes" record what was built.
+sections 6, 7, "S3 done", "R6 fixes" and "S4 done" record what was built.
 
 Read-only analysis, 2026-10-25. Fork `main` 2b306524 (0.341.0). Upstream `upstream/main` 9da90910 (0.38c, 2026-10-20).
 Merge base of both = fad5a027 (2026-09-16, upstream 0.3). **The fork never merged upstream after 0.3**: every upstream
@@ -395,3 +396,41 @@ dashboard muster column, DF route, opt-in battleground goal, relic temple owners
 immunity. Also not ported: upstream's `SupersedeAutomatic` (a forced expedition ending the realm's unstarted automatic
 rallies). Side finding, not fixed (Camlann wave, off in Realm-1): `BotBrain.SupportOffense` starts `_supportLastTurn` at
 `long.MinValue`, so the first fight of a bot skips its per-fight roll (same overflow pattern).
+
+## S4 done (2026-10-25, port session S4; implemented in source, real-client check pending)
+
+Worktree branch `rvr-port-s4` (not merged, no version). No live run. "RvR" means `WorldMode.IsRvr` (Realm-1); branched
+sites carry a `Fork:` or "port session S4" comment. No new switch: the only setting read is upstream's existing
+`rvr_battleground_announcements`.
+
+| Item | Verbatim / branched | Player sees in Realm-1 | Camlann |
+|---|---|---|---|
+| 1. Lord shield | Branched (RvR). Upstream `ShieldedFromBots` / `IsBotSource` and the two `TakeDamage` early returns, behind `GuardLord.IgnoresDamage(world, ...)`; door test through the S2 `AutonomousWorldBotController.PosternLike`. Camlann has its own rule (bots never target the lord while a gate stands, `AutonomousSiegeDoctrine.PickKeepTarget`, and player siege engines count), so no merge into it. | Siege engines never hurt a keep lord; a bot or a bot's pet cannot hurt him while the gate or keep door (posterns aside) is closed; players can. | unchanged |
+| 2. No item loot | Verbatim, both worlds. `AbstractServerRules.NoItemLoot` and `CanDropLoot && !NoItemLoot(...)`. The fork already skipped item drops for eligible autonomous bot victims (early return); keep guards, lords, other gamebots and pets of players or gamebots dropped items. Party gear (`PlayerCompanionGearRewards`), realm points and coins of players are paid before the check and unchanged. | No ROG items or coins from keep guards, lords, companions, `/spawn` helpers and pets of players or bots. | same (no Camlann rule existed) |
+| 3. AutonomousGroupPace | `AutonomousGroupPace`, `AutonomousGroupMemberStall`, `FarthestMemberDistance` verbatim; `NpcMovementComponent.MaxSpeed` applies the boost (inert without a `CatchUp` order). Branched (RvR): the leader's two pace checks (region crossing, camp approach) and the follower `CatchUp`. Camlann keeps Stefan's 400/700 cohesion hysteresis, leader loops and the fork follow speed (`AutonomousGroupMotion.FollowSpeed`), which upstream's pace would replace. | Group leaders keep full speed unless a member trails beyond 1,500 (resume at 900); a member stuck 45 s no longer holds the group (`AUTONOMOUS_GROUP_MEMBER_STALLED`); followers run up to 25 % faster to their slot. | unchanged |
+| 4. Battleground siege announcements | Verbatim in `RealmRvrEventLayer.Defense` (`ObserveBattlegroundSiege`, `BattlegroundSiegeIsNew`), `AutonomousBattlegroundWave.cs` copied verbatim (only `TooFewForAssault` is called). The keep-take broadcast (`PlayerMgr.BroadcastKeepTakeMessage`) follows the launcher switch in RvR, as upstream; Camlann announces every take as before. | "Albion's forces have laid siege to Hibernia's Dun Abermenai in Abermenai!" once per realm and 5 quiet minutes (`BG_SIEGE_STARTED`); stray bots of a realm with fewer than 8 inside announce nothing; the RvR announcement switch also silences keep takes. | unchanged |
+| 5. Dashboard muster lines | MERGE. Upstream's "Gathering: marching in 6m" / "Marching to the keep" / "Attack window ... (present = at the keep)" in RvR (`AutonomousRvrDashboard.MusterLines`); `RVR_KEEP_TAKEN` log line in both worlds; RvR keep and relic owner shown by realm as upstream (the launcher's realm filter reads it; the fork showed "Unclaimed" for every unclaimed RvR keep). Not taken: upstream's Battlegrounds tab and "Neutral raid" rows (they belong to the opt-in battleground goal and the neutral raids). Launcher unchanged: upstream changed no RvR tab column, the muster text is in the Forces cell. | Launcher RvR tab: muster countdown and attack window on their own lines; keeps and relics listed under their realm. | "Preparation: ..." and guild owners unchanged |
+| 6. Raid refill / regroup | Branched (RvR) where Camlann raids differ: upstream's forced-party batch (`RecruitForcedPartiesUpstream`: one party per running raid per 5 s, pooled forced parties `ComposeForcedParty`, stable-route riders may join), refill of short parties (`TryRefillRaidParty`, `AddReplacement`, `REALM_RAID_REPLACEMENT`), hub-route release after 3 failures (`RealmRaidHubEscape`, `ReleasePartyMember`, `REALM_RAID_HUB_ROUTE_RELEASED`), closest-to-hub recruiting (`PlanForcedRaid(realm, hub)`), release at the raid hub when the dungeon has no bind (`TryRaidRelease`, `AUTONOMOUS_SAFE_RELEASE reason=raid-hub`), regroup at the dungeon front (`TryDungeonRegroupPoint` from the pocket escape and `REALM_EXPEDITION_STRANDED_REGROUP`), queued parties walk to the front. Both worlds (pure fixes, no Camlann rule): failed-post retry (30 s), `REALM_RAID_NO_MUSTER_POST`, pet-list cache (fork owner filter kept), slower trash respawn (`RaidRespawnInterval`, inert: upstream fills it only from neutral raids). Fork additions kept: the raid battlegroup (released members detach, replacements attach). | Realm raids refill gaps, form faster, fallen raiders come back from the rally town, stranded members rejoin the front. | unchanged except the two perf fixes |
+| 7. SupersedeAutomatic | Branched (RvR), verbatim with upstream's forced-dungeon entrance pre-check (fork route builder; `REALM_RAID_START_UNAVAILABLE`). | A forced expedition ends the realm's unstarted automatic rallies ("Stopped by player", no cooldown). | unchanged |
+| 8. SupportOffense MinValue | Both worlds (pure bug). `AutonomousRvrSupportOffense.StartsNewFight` treats `long.MinValue` as "never ran", as the R6 expiry fix. The wave is off in Realm-1. | nothing (wave off) | a support bot's first fight rolls its "stays on heals" chance |
+| 9. Relic rules | Branched. `RvrRelicRules.TempleRulesApply(world)` (Camlann only): in Realm-1 no milegate seals a temple (`GetRvrPickupVerdict`), relic keeps are captured like any keep (`RealmCaptureApplies`), no start reset of relic keeps (`RelicKeepStartRealm`), stock relic guards by upstream's rule, no milegate examine line. Pickup stays upstream's: enemy realm, own relic of the type held, 8 on the pad. Camlann never consulted R3b (its relics follow the guild rule), so the temple rule is dormant in both worlds until it is wired into Camlann's guild relics (owner decision, not done). | Any enemy temple holding a relic is a target once the realm holds its own relic of that type; relic keeps change hands and can be retaken. | unchanged |
+
+Tests: `UT_RvrPortS4` (45 cases, of which 31 are upstream cases carried verbatim from UT_AuditFixesOct5,
+UT_GroupTravelAndEventsOct5, UT_SupportReachAndGroupStall, UT_GameWideAnnouncements, UT_UnreachableServicesAndDoorDetours,
+UT_EveningAuditFixes, UT_RealmRaidRecruitment, UT_StallAndRecoveryPolicies and UT_LevelFiftyAuditFixes); `UT_RvrRelics`
+rewritten for the upstream rule in Realm-1 (pickup without milegate, relic raid targets, relic keep capture, start realm).
+
+### Not done in S4
+
+| Item | Why | What it needs |
+|---|---|---|
+| Darkness Falls route + neutral raids | Unchanged from S3: upstream's DF proofs belong to its mesh. Without them `RaidRespawnInterval` stays inert and there are no "Neutral raid" rows. | Regenerated DF proofs on our patched `zone249.nav`. |
+| Opt-in battleground goal, launcher Battlegrounds tab | Owner decision (one RvR-only setting). `AutonomousBattlegroundWave` is in, its `ShouldGather` executor is unused. | Owner yes, then the executor, the dispatch and the tab. |
+| Upstream pocket escape at the raid hub (`AutonomousZonePockets`, `navmesh/pockets.json`) and `IsInRally` watchdog protection, expedition "ordinary travel" fallback, grounded-dragon-in-combat landing rule | Not in the S4 list; each is its own upstream fix on files outside it. | A follow-up port. |
+| R3b temple rule in Camlann | Camlann's relics are guild relics; wiring the milegate chain into them is a Camlann behaviour change. | Owner decision. |
+| Frontier porters for RvR, fork extensions | Not in this package. | Own sessions. |
+
+Live run, watch: `BG_SIEGE_STARTED`, `RVR_KEEP_TAKEN` (now also relic keeps in Realm-1), `KEEP_REALM_CAPTURED` for a relic
+keep, `AUTONOMOUS_GROUP_MEMBER_STALLED`, `REALM_RAID_REPLACEMENT`, `REALM_RAID_HUB_ROUTE_RELEASED`, `REALM_RAID_NO_MUSTER_POST`,
+`REALM_RAID_START_UNAVAILABLE`, `REALM_EXPEDITION_STRANDED_REGROUP`, `AUTONOMOUS_SAFE_RELEASE reason=raid-hub`, lords at full
+health while a keep door stands.
