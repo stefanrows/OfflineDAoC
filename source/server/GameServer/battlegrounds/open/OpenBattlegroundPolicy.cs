@@ -40,12 +40,35 @@ namespace DOL.GS
             return CanEnterOpen(true, BattlegroundCampaignPolicy.IsReady(BattlegroundCampaignCatalog.FindOpen(), out _), actor.Level);
         }
 
-        // Once per server start: why the open BG stays closed (porter line hidden, no bots assigned).
+        /// <summary>
+        /// RvR world (owner 2026-10-25, bug 179): the open BG is off by default there. An existing Realm-1 save that has
+        /// not had the default yet turns it off once; Camlann and a save already migrated keep the owner's setting.
+        /// </summary>
+        public static bool TurnsOffForRvrWorld(WorldModelKind world, bool defaultApplied) =>
+            world == WorldModelKind.Realm && !defaultApplied;
+
+        /// <summary>The one-time switch-off of <see cref="TurnsOffForRvrWorld"/>, run at server start before any roster pulse.</summary>
+        public static void ApplyRvrWorldDefault()
+        {
+            if (!TurnsOffForRvrWorld(WorldMode.Current, OpenBattlegroundProperties.OPEN_BG_RVR_DEFAULT_APPLIED)) return;
+            bool wasEnabled = OpenBattlegroundProperties.OPEN_BG_ENABLED;
+            if (!DOL.GS.Commands.OpenBgSetupStore.TryWrite("open_bg_enabled", "False", "rvr-world-default", out string error) ||
+                !DOL.GS.Commands.OpenBgSetupStore.TryWrite("open_bg_rvr_default_applied", "True", "rvr-world-default", out error))
+            {
+                Log.Warn($"RVR_OPEN_BG_DEFAULT_OFF failed error=\"{error}\"");
+                return;
+            }
+            Log.Info($"RVR_OPEN_BG_DEFAULT_OFF world=Realm-1 wasEnabled={wasEnabled} enabled={OpenBattlegroundProperties.OPEN_BG_ENABLED}");
+        }
+
+        // Once per server start: the RvR world's default, then why the open BG stays closed (porter line hidden, no bots
+        // assigned).
         [GameServerStartedEvent]
         public static void ReportAvailability(DOLEvent e, object sender, EventArgs args)
         {
             try
             {
+                ApplyRvrWorldDefault();
                 BattlegroundDefinition open = BattlegroundCampaignCatalog.FindOpen();
                 bool hasNavmesh = HasNavmesh(open);
                 int landings = hasNavmesh && BattlegroundCampaignPolicy.IsReady(open, out _)

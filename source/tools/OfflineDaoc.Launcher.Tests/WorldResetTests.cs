@@ -132,11 +132,16 @@ public class WorldResetTests
                      {
                          ("xp_rate", "10"), ("bot_xp_rate", "10"), ("rp_rate", "50"), ("bot_rp_rate", "15"),
                          ("ml_xp_per_level", "10"), ("artifact_xp_rate", "350"), ("toa_loot_in_atlantis", "True"),
-                         ("open_bg_enabled", "True"), ("open_bg_mode", "perrealm"), ("open_bg_max_bots", "450"),
+                         ("open_bg_mode", "perrealm"), ("open_bg_max_bots", "450"),
                          ("open_bg_groups8", "12"), ("open_bg_groups_small", "8"), ("open_bg_solos", "22"),
                          ("open_bg_band_min", "50"), ("open_bg_presets", "std8:1,caster8:1,raid8:8"),
                      })
                 Assert.That(Scalar(database, $"SELECT Value FROM ServerProperty WHERE `Key`='{key}'"), Is.EqualTo(value), key);
+            // Owner 2026-10-25 (bug 179): the RvR world's open BG starts off and carries the server's marker; Camlann unchanged.
+            Assert.That(Scalar(database, "SELECT Value FROM ServerProperty WHERE `Key`='open_bg_enabled'"),
+                Is.EqualTo(world == WorldSaveKind.Realm ? "False" : "True"), "open_bg_enabled");
+            Assert.That(Scalar(database, $"SELECT COUNT(*) FROM ServerProperty WHERE `Key`='{WorldReset.RvrOpenBgDefaultKey}' AND Value='True'"),
+                Is.EqualTo(world == WorldSaveKind.Realm ? 1L : 0L), "the RvR default marker");
             Assert.That(Scalar(database, "SELECT Category FROM ServerProperty WHERE `Key`='xp_rate'"), Is.EqualTo("rates"),
                 "an existing row keeps its category");
             Assert.That(Scalar(database, "SELECT Category FROM ServerProperty WHERE `Key`='toa_loot_in_atlantis'"), Is.EqualTo("atlas_rog"),

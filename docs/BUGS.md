@@ -6,25 +6,6 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
 
 ## Open
 
-178. **RvR port: the army does not advance after RVR_SIEGE_MARCH.** Live
-     0.345.0, fresh level-50 Realm-1 world, speed 20x (achieved ~6x),
-     2026-10-25 19:15 server time: Albion's siege on rvr-keep-79 marched with
-     72 attackers (`RVR_SIEGE_MARCH`, `RVR_MARCH_DETOUR leader=Leoferorwin
-     from=597548,631833 via=681779,645529`), but no `RVR_KEEP_ARRIVED` for the
-     target followed; from 19:23 every force logs `RVR_RALLY_DELAY ... made no
-     approach progress for eight minutes`. Members die in region 100 as
-     `branch=solo` / `group_size=3` (e.g. Harerorbert id 3850, three deaths
-     19:14-19:23), so the column is scattered instead of marching behind the
-     leader; 41 NoPathFound / 26 PartialPathFound in the same 10 min; the
-     fork's `RVR_MARCH_STATE marching=True` flags appear although the march
-     restraint should be off in Realm-1 (0.345.0). Open BG Thidranki (252) ran
-     738 `AUTONOMOUS_SIEGE_RESURRECTION` lines in 10 min with level-50 bots
-     (log spam, check whether the open BG belongs in the Realm-1 world at all).
-     Suspects: RealmRally/TryMarchWithArmy not driving the followers (S2 port),
-     or the fork controller re-tasking members (danger memory, solo RvR
-     branch) despite the army assignment. Evidence: scratchpad now.log,
-     march.log, speed20.log of session b910e783.
-
 177. **Player gets stuck in Atlantis zones.** Owner report 2026-10-25 ~00:50 on
      0.327.0, Midgard copy (region 30): while walking through several ToA
      zones the character repeatedly stuck in place, could still move a little
@@ -41,7 +22,8 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
      error ends with "Calling RemoveFromWorld", so the bot vanishes:
      (a) `AutonomousBattlegroundDriver.Assist` (BotBrain.AutonomousBattleground
      path, region 252): `ArgumentException: '50' cannot be greater than 2`
-     (also "than 39"), a `Math.Clamp` with min > max, 8 times;
+     (also "than 39"), a `Math.Clamp` with min > max, 8 times (fixed in
+     source as bug 179);
      (b) `BPMob.Die` (scripts/mobs/custom/BPMob.cs:64): `InvalidCastException`
      GameBot → GamePlayer when a bot kills a BP mob, 3 times, through
      AttackService/CastingService/EffectService;
@@ -233,6 +215,131 @@ Tasks, feature requests, and ideas belong in [TASKS.md](TASKS.md).
     workaround was reported. Installed server version is unknown.
 
 ## Fixed in source; installation verification pending
+
+179. **Open BG driver crash: "'50' cannot be greater than N" removes the bot.**
+     Live 0.345.0, Realm-1 world, 2026-10-25 19:00-19:55: 12 `Critical error
+     encountered in NpcService: System.ArgumentException: '50' cannot be
+     greater than 2` (also 5, 24, 38, 41, 46) at
+     `AutonomousBattlegroundDriver.Assist` via `BotBrain.ThinkAutonomousBattleground`
+     (region 252, level-50 bots of the fork's open BG). The bot is removed from
+     the world. It is the same crash as bug 175 (a). Cause: the follow pace
+     `Math.Clamp(leader.CurrentSpeed, 50, bot.MaxSpeed)` throws when a snared
+     or rooted member's top speed is below 50. Fix in source (unreleased,
+     worktree `bug178`): `AutonomousBattlegroundDriver.FollowPace` keeps the
+     floor of 50 but never above the member's own top speed (both worlds).
+     Offline: `UT_Bug179FollowPace` (6 cases). Real-client check pending: no
+     "cannot be greater than" in `server-console.log` during an open-BG
+     session. **Owner decision 2026-10-25: the open BG is off by default in
+     the RvR world** (upstream has none). A fresh RvR world writes
+     `open_bg_enabled` False plus the marker `open_bg_rvr_default_applied`.
+     An existing Realm-1 save is switched off once at the next server start
+     (`RVR_OPEN_BG_DEFAULT_OFF`). The OPEN BG window or `/bgsetup enabled on`
+     can turn it on again, and the server leaves it on. Camlann is unchanged
+     (docs/RVR_WORLDS.md). So in Realm-1 the crash only matters if the owner
+     turns the open BG on; the clamp fix is in source for that case and for
+     Camlann. Offline: `UT_RvrOpenBgDefault` (6 cases); the launcher's
+     `BothWorldsWriteTodaysRatesAndOpenBgSetup` checks both worlds.
+     Real-client check pending: the first start after the update logs
+     `RVR_OPEN_BG_DEFAULT_OFF`, no bots go to Thidranki in Realm-1, and
+     switching the open BG on by hand survives a restart.
+
+178. **RvR port: the army does not advance after RVR_SIEGE_MARCH.** Live
+     0.345.0, fresh level-50 Realm-1 world, 2026-10-25: Albion's siege on
+     rvr-keep-79 marched 19:15:07 with 72 attackers (`RVR_SIEGE_MARCH`,
+     `RVR_MARCH_DETOUR leader=Leoferorwin from=597548,631833
+     via=681779,645529`); from 19:23 `RVR_RALLY_DELAY ... made no approach
+     progress for eight minutes`; members died in region 100 as `branch=solo` /
+     `group_size=3` (e.g. Harerorbert id 3850). Evidence: scratchpad now.log,
+     march.log, speed20.log of session b910e783 and the live
+     `server-console.log` from the 19:00:38 start.
+     **Findings (2026-10-25 19:00-19:55, three sieges).** (1) The army
+     arrives: rvr-keep-79 marched 19:15:07 at **1x** (the world ran at 1x
+     until 19:24:54, activity summary `World speed (S/E/A): 1x / 1x`), the
+     leader covered about 55,000 of 110,000 units in those ten minutes with
+     the column holds and opened the battle 80 s after the switch to 20x
+     (19:26:16); rvr-keep-101 19:29:11 -> 19:32:40, rvr-keep-52 19:40:10 ->
+     19:42:07; 747 `RVR_KEEP_ARRIVED intent=AssaultKeep` at those keeps. 101
+     and 52 were captured (19:36:59, 19:45:06), 79 at 19:52:38 after 26
+     minutes of fighting. (a) `present=0/0/0` at `RVR_SIEGE_STARTED` is
+     upstream's count: the leader's arrival opens the battle once 60 % of
+     the column is within 3,000 units of it or the camp, and `present`
+     counts only bots standing at their rally posts, which marchers take
+     after the battle opens (`Attendance`, `ReportArmyArrived` and
+     `TryMarchWithArmy` verbatim). (b) The column is driven by the verbatim
+     `TryMarchWithArmy`. Before the march the `RVR_RALLY_DELAY` lines are
+     bots holding the muster post (same in upstream). After it they name
+     15 of the 72. 38 of the `RVR_KEEP_ROUTE_FAILED` lines for rvr-keep-79
+     come from two bots: Harerorbert in a pocket at 689711,649949 (32) and
+     Renenorren inside the keep (6). (c) Defense: the layer, `PulseDefense`,
+     `RealmEventPolicy` (`rvr_siege_defense_ratio` 0.5 in the save and in
+     upstream) and the planner are verbatim. Defenders are drafted at once
+     when the battle opens (`RVR_REINFORCEMENTS defenders=36/50/39` against
+     128 attackers and 64 third realm) and converge on the keep one by one.
+     The defense muster that `ChooseOrJoin` then opens cannot gather anyone,
+     because `GetRallyOrder` gives no muster order once an automatic siege's
+     battle has started (only a player-triggered defense, `DefenseReaction`,
+     gets one). Hence `RVR_DEFENSE_MUSTER_EXTENDED mustered=0` and
+     `RVR_DEFENSE_MARCH mustered=0`; 52 mustered 14 because its defenders
+     joined before the march. This is upstream 0.38c behaviour and was not
+     changed. Defenders may answer an automatic siege only once its keep is
+     hit (`CanRespond`, the keep's `UnderAttack` signal is the same as
+     upstream's). That is in practice the army's arrival, so their muster
+     can never fill. The porters, the task picker and the PvP wall do not
+     cause the 0: all three keeps had their full defender cap drafted at
+     once. `UT_Bug178ArmyAssignment` pins the rule (a defender that answers
+     before the battle gets the muster order, one drafted after it does
+     not). Gathering the defense after an automatic battle has opened would
+     be new behaviour, an owner decision (for example, the player-defense
+     rule `DefenseReaction` also for bot sieges). Defenders do fight: 289 Midgard deaths and 277 Midgard kills
+     within 9,000 units of rvr-keep-79 during its battle; about 30 defender
+     deaths each at 101 and 52 before they fell after 3-4 real minutes at
+     20x (about 12-16 game minutes). Not proven why 101 and 52 fell that
+     fast. Candidates are upstream's lord shield (the S4 backlog), the many
+     bots tied up on the fork's porters (623 RvR bots on "Boarding frontier
+     teleporter" and 422 on "Boarding battleground teleporter" at 19:55) and
+     the open BG pull.
+     (2) Root cause of the scattered column: two fork-only re-task
+     paths, absent in upstream 0.38c and missed by the S2/R6 wave switch,
+     still acted on army members in Realm-1: (a) the repeated-loss memory
+     (`ObserveRepeatedPvpLoss`) abandoned the keep target of a solo siege
+     force after two PvP deaths within 5,000 units (`RVR_KEEP_ROUTE_ABANDONED
+     target=rvr-keep-79 ... reason="Repeated PvP losses near the same place"`
+     for Bereralwin, Wilenhelm, Osoenred; the force leaves the siege for 20
+     minutes), although S2 documents "never abandons a keep route" for
+     Realm-1; (b) the "three PvP deaths in twenty minutes" wall ended the RvR
+     tour of a solo RvR bot (Wilenhelm, Maralelle now SoloPve, Osoenred
+     GroupPve) and the coordinator pulled walled bots out of RvR parties,
+     including the siege parties `FormSiegeParties` just built: party 155
+     (Reneralbert, Serelorelle, Gisalbeth) formed 19:15:09 and ended 19:15:13
+     "A member left", two of its three members walled at that time; 7 of the
+     15 stragglers carry the wall, 211 online bots carried a wall entry at
+     19:35. A bot
+     that leaves its party falls back to its own `rvr-<id>` force, which the
+     party merge had removed from the event, so it roams and dies as
+     `branch=solo` while its old party entry keeps reporting it as stalled.
+     **Fix in source** (unreleased, worktree `bug178`): both rules are fork
+     waves now (`AutonomousRvrWaves.ActiveFor`): in Realm-1 a world bot outside
+     the battlegrounds keeps its keep target after roadside deaths, its deaths
+     no longer count toward the wall, and a walled bot is no longer removed
+     from its RvR party (`AutonomousActivityScheduler.PvpWallApplies`). Camlann
+     and battleground participants unchanged. Not changed: walls already in
+     the save still bar RvR at the next task choice until they expire (45-90
+     game minutes); the fork's frontier porters (about 400 bots on "Boarding
+     frontier teleporter" at 19:35) stay a documented Realm-1 deviation.
+     Offline: `UT_Bug178ArmyAssignment` (6 cases; the RvR repeated-loss case
+     fails without the fix). Real-client check pending: next Realm-1 siege at
+     1x or a known speed, no `RVR_KEEP_ROUTE_ABANDONED` with "Repeated PvP
+     losses" and no siege party ending seconds after `RVR_SIEGE_PARTY_FORMED`.
+     **Note for the owner, open BG in Realm-1 (read-only, not changed).**
+     Upstream 0.38c has no open battleground: its battlegrounds are level
+     brackets (`BattlegroundBrackets`, Thidranki 252 for levels 20-24), so no
+     level-50 bot ever enters Thidranki there. In this session the fork's open
+     BG (`open_bg_enabled` on) assigned 392 level-50 bots to region 252
+     (`AUTONOMOUS_BG_ASSIGNED`, 19:00-19:29) and logged 1,058 of the 1,117
+     `AUTONOMOUS_SIEGE_RESURRECTION` lines there. By the "Realm-1 = upstream"
+     rule the open BG should not run in the Realm-1 world; it pulls level-50
+     bots away from the frontier armies. **Owner decision 2026-10-25: off by
+     default in Realm-1**, implemented with bug 179.
 
 176. **Autonomous bot keep sieges almost never capture: forces are idle-closed
      while marching, or the guild army is called off with nobody at the camp.**

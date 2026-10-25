@@ -121,6 +121,10 @@ namespace DOL.GS
         private void ObserveRepeatedPvpLoss(GameBot bot)
         {
             var death = bot.LastAutonomousDeath;
+            // RvR world (upstream 0.38c): no repeated-loss avoidance. A siege attacker keeps its keep target and its
+            // army after roadside deaths (bug 178: solo forces left rvr-keep-79 for "Repeated PvP losses near the same
+            // place"). Camlann and the battleground participants keep it (AutonomousRvrWaves).
+            if (!AutonomousRvrWaves.ActiveFor(bot)) return;
             if (!AutonomousSiegeMarch.IsWorldActor(bot) || death?.CountsAsPvp != true) return;
             bool repeated = _previousPvpLoss != null && death.RegionId == _previousPvpLoss.RegionId &&
                 death.Tick - _previousPvpLoss.Tick <= 20 * 60_000 &&

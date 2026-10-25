@@ -16,6 +16,14 @@ namespace DOL.GS
         [ServerProperty("pvp", "open_bg_enabled", "Open the permanently open battleground (Thidranki 252, levels 1-50) through the porters' [open BG] line; it also needs the battleground campaign and zone 252's navmesh", false)]
         public static bool OPEN_BG_ENABLED = false;
 
+        /// <summary>
+        /// RvR world (Realm-1, owner 2026-10-25): the open BG is off by default, as upstream 0.38c has none. The server
+        /// switches it off once in an existing Realm-1 save and sets this marker, so an owner who turns the open BG on
+        /// again in the OPEN BG window keeps it on (<see cref="OpenBattlegroundPolicy.ApplyRvrWorldDefault"/>).
+        /// </summary>
+        [ServerProperty("pvp", "open_bg_rvr_default_applied", "RvR world: the open BG was switched off once as that world's default (set by the server; switch the open BG on again in the OPEN BG window)", false)]
+        public static bool OPEN_BG_RVR_DEFAULT_APPLIED = false;
+
         [ServerProperty("pvp", "open_bg_max_bots", "Most autonomous bots in the open BG at once, all realms together (8-500)", 72)]
         public static int OPEN_BG_MAX_BOTS = 72;
 

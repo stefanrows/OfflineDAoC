@@ -218,9 +218,12 @@ public static class WorldReset
         };
         // Today's open BG (owner decision 2026-10-20: perrealm, 450 bots). The server's own ranges allow these
         // values; the launcher tab's narrower ranges are display limits and are not applied here.
+        // RvR world (owner 2026-10-25, bug 179): the open BG starts off, as upstream 0.38c has none; the OPEN BG window
+        // can switch it on. The marker tells the server that this save already has the RvR default.
+        bool rvr = world == WorldSaveKind.Realm;
         foreach ((string key, string value) in new[]
                  {
-                     ("open_bg_enabled", "True"), ("open_bg_groups8", "12"), ("open_bg_groups_small", "8"),
+                     ("open_bg_enabled", rvr ? "False" : "True"), ("open_bg_groups8", "12"), ("open_bg_groups_small", "8"),
                      ("open_bg_solos", "22"), ("open_bg_max_bots", "450"), ("open_bg_cycle_min_minutes", "15"),
                      ("open_bg_cycle_max_minutes", "45"), ("open_bg_player_drift", "True"), ("open_bg_band_min", "50"),
                      ("open_bg_band_max", "50"), ("open_bg_units_albion", ""), ("open_bg_units_midgard", ""),
@@ -228,8 +231,15 @@ public static class WorldReset
                      ("open_bg_presets", "std8:1,caster8:1,raid8:8"),
                  })
             rows.Add((OpenBgSettings.Category, OpenBgRow(key, value)));
+        if (rvr)
+            rows.Add((OpenBgSettings.Category, new ServerPropertyRow(RvrOpenBgDefaultKey,
+                "RvR world: the open BG was switched off once as that world's default (set by the server; switch the open BG on again in the OPEN BG window)",
+                "False", "True")));
         return rows;
     }
+
+    /// <summary>The server's marker that a Realm-1 save already has the open BG off by default (OpenBattlegroundProperties).</summary>
+    public const string RvrOpenBgDefaultKey = "open_bg_rvr_default_applied";
 
     private static ServerPropertyRow Rate(string key, string description, string value) => new(key, description, "1", value);
 

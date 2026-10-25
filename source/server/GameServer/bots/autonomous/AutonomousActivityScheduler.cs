@@ -86,6 +86,14 @@ public static class AutonomousActivityScheduler
         return Math.Clamp(share + (aggression - 50) / 500d + (riskTolerance - 50) / 700d, 0, .95);
     }
 
+    /// <summary>
+    /// Bug 178: the "three PvP deaths" wall (counting the death, ending a solo RvR tour, pulling a walled bot out of
+    /// its RvR party) is a fork rule. The RvR world (Realm-1, upstream 0.38c) has no such wall, so a siege attacker
+    /// keeps its task and its army there however often it dies. Camlann and the battleground participants keep the
+    /// wall (<see cref="AutonomousRvrWaves"/>).
+    /// </summary>
+    public static bool PvpWallApplies(GameLiving living) => AutonomousRvrWaves.ActiveFor(living);
+
     public static bool IsPveBlocked(OfflineWorldBotRecord record, DateTime now) =>
         record != null && DateTime.TryParse(record.PveBlockUntilUtc, null, DateStyle, out DateTime until) &&
         until.ToUniversalTime() > now.ToUniversalTime();

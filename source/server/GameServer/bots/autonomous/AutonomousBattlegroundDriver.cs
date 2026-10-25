@@ -29,6 +29,14 @@ public static class AutonomousBattlegroundDriver
     public const int AssaultGroupMinimum = 4;
     public const int ArrivalDistance = 150;
     public const int FollowDistance = 300;
+
+    /// <summary>
+    /// A member walks at the leader's pace, at least 50, never above its own top speed. Bug 179: a snared or rooted
+    /// member's top speed is below 50, and Math.Clamp(speed, 50, max) threw, so the brain crashed and the bot was
+    /// removed from the world (12 times in 0.345.0's first hour in the RvR world, also bug 175 (a)).
+    /// </summary>
+    public static short FollowPace(int leaderSpeed, int maxSpeed) =>
+        (short)Math.Clamp(leaderSpeed, Math.Min(50, maxSpeed), maxSpeed);
     private const int RouteIntervalMilliseconds = 3_000;
     private const int ClaimRetryMilliseconds = 5_000;
 
@@ -1125,7 +1133,7 @@ public static class AutonomousBattlegroundDriver
             // The RvR world's rule: a member that fell behind sprints to close the gap.
             AutonomousRvrSpeed.UpdateFollowerSprint(bot, distance);
             short pace = distance > FollowDistance || !leaderMoving ? bot.MaxSpeed
-                : (short)Math.Clamp((int)leader.CurrentSpeed, 50, (int)bot.MaxSpeed);
+                : FollowPace(leader.CurrentSpeed, bot.MaxSpeed);
             GoTo(bot, state, follow, now, FollowGoalTolerance, pace, keepMoving: leaderMoving);
         }
         else

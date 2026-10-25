@@ -64,7 +64,7 @@ The rules every change must keep. Task 147, plan
    Realm Exchange (own realm), enemy name masking through `RvrServerRules`,
    the realm boundary (bots walk out of enemy homelands), Stefan's movement
    port (tasks 135-139), the road-graph fallback, the open BG in Thidranki
-   per realm, the realm login balancer (600 per realm) and the 2003-style
+   per realm (off by default in the RvR world since bug 179, see below), the realm login balancer (600 per realm) and the 2003-style
    realm guild names (owner decision 9). Built for RvR but off in Realm-1
    since 0.342.0: the R4a/R4b realm armies, home reserve, grudge and revenge
    trips, bot keep claims, guild keep defense, the fork's march restraint and
@@ -274,7 +274,9 @@ description; only the value changes.
 | `ml_xp_per_level` | 10 |
 | `artifact_xp_rate` | 350 |
 | `toa_loot_in_atlantis` | True |
-| `open_bg_enabled`, `open_bg_mode` | True, `perrealm` |
+| `open_bg_enabled` | RvR world False, Camlann True (owner 2026-10-25, bug 179) |
+| `open_bg_rvr_default_applied` | RvR world only: True (the server's marker, see below) |
+| `open_bg_mode` | `perrealm` |
 | `open_bg_groups8`, `open_bg_groups_small`, `open_bg_solos` | 12, 8, 22 |
 | `open_bg_max_bots` | 450 |
 | `open_bg_band_min`, `open_bg_band_max` | 50, 50 |
@@ -283,6 +285,16 @@ description; only the value changes.
 | `open_bg_presets` | `std8:1,caster8:1,raid8:8` |
 | `open_bg_units_*`, `open_bg_landing_peace` | empty |
 | `population_enabled`, `active_target`, `hard_active_cap` | true, roster size, 0 |
+
+**Open BG in the RvR world (owner 2026-10-25, bug 179).** Upstream 0.38c has no
+open battleground; its Thidranki is a level bracket of 20-24. The RvR world
+therefore starts with the open BG off. A fresh RvR world writes
+`open_bg_enabled` False and the marker `open_bg_rvr_default_applied` True.
+An existing Realm-1 save without the marker is switched off once, at the
+next server start (`RVR_OPEN_BG_DEFAULT_OFF wasEnabled=... enabled=False` in
+`server-console.log`), and gets the marker. After that the server never
+touches the switch again: the owner can turn the open BG on in the OPEN BG
+window or with `/bgsetup enabled on`. Camlann keeps its setting.
 
 ## Other launcher pieces
 

@@ -46,7 +46,8 @@ namespace DOL.GS.Tests
             string[] rows = typeof(OpenBattlegroundProperties).GetFields()
                 .Select(field => field.GetCustomAttributes(typeof(DOL.GS.ServerProperties.ServerPropertyAttribute), false)
                     .Cast<DOL.GS.ServerProperties.ServerPropertyAttribute>().FirstOrDefault()?.Key)
-                .Where(key => key != null).OrderBy(key => key).ToArray();
+                // The RvR world's default marker (bug 179) is set by the server, not an owner setting.
+                .Where(key => key != null && key != "open_bg_rvr_default_applied").OrderBy(key => key).ToArray();
             Assert.That(OpenBgSetupParser.Keys.Select(key => key.RowKey).OrderBy(key => key), Is.EqualTo(rows));
         }
 

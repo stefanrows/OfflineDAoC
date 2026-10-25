@@ -1124,8 +1124,9 @@ namespace DOL.GS
                 // Only PvP-minded actors hit the "losing" wall. A leveler who is
                 // ganked stays a leveler; its PvE task is not a PvP retreat.
                 // Dying with a real group is part of RvR, not a reason to quit it.
+                // RvR world (upstream 0.38c): no wall at all; a siege attacker keeps its tour (bug 178).
                 bool inRvrGroup = Group?.MemberCount >= 3 && AutonomousObjectiveAssignments.Is(this, eAutonomousObjectiveKind.RvR);
-                if (_lastDeathWasPvp && !inRvrGroup &&
+                if (_lastDeathWasPvp && !inRvrGroup && AutonomousActivityScheduler.PvpWallApplies(this) &&
                     AutonomousActivityScheduler.CountsPvpDeathTowardWall(PersistentRecord,
                         AutonomousObjectiveAssignments.KindFor(this)) &&
                     AutonomousActivityScheduler.RecordPvpDeath(PersistentRecord, WorldSimulationClock.UtcNow) &&
