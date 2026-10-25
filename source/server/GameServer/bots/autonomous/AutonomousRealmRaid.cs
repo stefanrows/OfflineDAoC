@@ -94,6 +94,10 @@ namespace DOL.GS
         /// expedition per realm at a time. The Camlann world keeps the fork's mixed-realm PvE expeditions.
         /// </summary>
         public static bool RaidsByRealm(WorldModelKind world) => world == WorldModelKind.Realm;
+
+        /// <summary>A forced expedition of the RvR world (upstream 0.38c): no staging or battle clock, it runs until its
+        /// encounter falls or the player presses Stop event.</summary>
+        private static bool NoTimeLimit(Raid raid) => raid.Forced && raid.Deadline == long.MaxValue;
         private sealed record FinishedLoot(GameBot[] Members, RealmRaidLootOwner.Ledger Ledger, long Expires);
         private static readonly Dictionary<GameNPC, FinishedLoot> CompletedLoot = new();
         private static long _nextPulse;
@@ -894,7 +898,10 @@ namespace DOL.GS
 
         private static void End(Raid raid, long now, string reason)
         {
-            string outcome = reason.StartsWith("Staging failed") ? "Failed rally" : reason.Contains("four-hour") ? "Timed out" :
+            // Upstream 0.38c (R6): the launcher's Stop event is recorded as such and sets no cooldown.
+            bool stoppedByPlayer = reason.StartsWith(StoppedByPlayer);
+            string outcome = stoppedByPlayer ? "Stopped by player" :
+                reason.StartsWith("Staging failed") ? "Failed rally" : reason.Contains("four-hour") ? "Timed out" :
                 raid.Definition.IsDungeon ? raid.DungeonRoute?.Complete == true ? "Boss defeated" : "Ended (unconfirmed)" :
                 !raid.Boss.IsAlive ? "Boss defeated" : "Encounter unavailable";
             RealmEventRecords.Finish(raid.Definition.Id, outcome, reason, raid.Support.Length);
@@ -921,8 +928,27 @@ namespace DOL.GS
             raid.Support = [];
             Raids.Remove(raid.Definition.Id);
             foreach (var reservation in Reservations.Where(p => p.Value == raid.Definition.Id).ToArray()) Reservations.TryRemove(reservation.Key, out _);
-            Cooldowns[raid.Definition.Id] = now + (30 + Random.Shared.Next(61)) * 60_000L;
+            // A player stop is not a failed attempt: no cooldown, so it can be restarted at once (upstream 0.38c).
+            if (!stoppedByPlayer)
+                Cooldowns[raid.Definition.Id] = now + (30 + Random.Shared.Next(61)) * 60_000L;
             RealmEventNotices.Queue(raid.Definition.Id, raid.Definition.Realm, RealmEventBanter.RaidOutcome(raid.Definition.Name, outcome));
+        }
+
+        private const string StoppedByPlayer = "Stopped by the player";
+
+        /// <summary>Launcher "Stop event" (upstream 0.38c, R6): ends an active dragon or epic dungeon expedition now,
+        /// forced or automatic, in both worlds. Its reserved bots and parties are released and no cooldown is set.
+        /// In the RvR world it is the only end of a forced expedition besides its encounter (no time limit there).</summary>
+        public static bool Stop(string id, out string reason)
+        {
+            lock (Sync)
+            {
+                if (!Raids.TryGetValue(id, out Raid raid))
+                { reason = "This expedition is not running."; return false; }
+                End(raid, GameLoop.GameLoopTime, StoppedByPlayer + " from the launcher.");
+                reason = $"{raid.Definition.Name} stopped. The bots return to their own goals; no cooldown was set.";
+                return true;
+            }
         }
 
         public static bool ResetCooldown(string id)
@@ -937,13 +963,16 @@ namespace DOL.GS
                 if (Raids.TryGetValue(d.Id, out var r)) return new Summary(d.Id, d.Name, GlobalConstants.RealmToName(d.Realm),
                     r.Started ? "RAID — " + (r.DungeonRoute?.Status ?? (DragonLanded(r) ? "underway" : "waiting for dragon landing")) :
                     $"Raid rally — {(r.Forced ? "forced" : "automatic")} — {(r.HubDeparted ? "travel/final staging" : r.Hub.Name)}" +
-                        (GameLoop.GameLoopTime >= r.Deadline ? !DragonLanded(r) ? " — waiting for dragon landing" : " — waiting for arrivals" : ""),
+                        (NoTimeLimit(r) ? " — starts when 200 are staged" + (!DragonLanded(r) ? " and the dragon lands" : "") :
+                        GameLoop.GameLoopTime >= r.Deadline ? !DragonLanded(r) ? " — waiting for dragon landing" : " — waiting for arrivals" : ""),
                     r.Support.Length + r.ForcedParties.Sum(p => p.Count(IsEligible)),
                     !r.HubDeparted ? r.Parties.Values.Sum(p => PresentAtHub(r,p)) : !r.Started ? PresentAtStaging(r) :
                     r.Parties.Values.Sum(p => p.Members.Count(b => b.IsAlive && b.CurrentRegionID == p.View.Camp.RegionId &&
                         b.IsWithinRadius(new Point3D(p.View.Camp.X, p.View.Camp.Y, p.View.Camp.Z), 1500))),
                     RealmRaidRecruitmentPolicy.AutonomousMinimumPresent,
-                    Math.Max(0, r.Deadline - GameLoop.GameLoopTime), r.Started ? "Battle" :
+                    // Upstream 0.38c (RvR world): forced expeditions have no clock; -1 tells the launcher "no time limit".
+                    NoTimeLimit(r) ? -1 : Math.Max(0, r.Deadline - GameLoop.GameLoopTime), r.Started ? "Battle" :
+                        NoTimeLimit(r) ? !r.HubDeparted ? "Muster" : "Staging" :
                         GameLoop.GameLoopTime >= r.Deadline ? "Waiting" : !r.HubDeparted ? "Muster" : "Staging");
                 GameNPC boss = Bosses.GetValueOrDefault(d.Id);
                 long respawn = boss is ApocInitializator initializer ? initializer.EncounterRespawnRemainingMilliseconds : boss?.RespawnRemainingMilliseconds ?? 0;

@@ -58,6 +58,11 @@ When a task is done and its required verification is complete, move it out of it
      raids per realm with upstream rally timing, no bracket battleground tours
      as upstream's 0% default, town teleporters, road fallback; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S3 done")
      implemented in source, real-client check pending.
+     R6 review fixes (siege deadlines fire on the live clock, march column
+     fights on the way, forced realm raids end by STOP EVENT, RvR keeps at
+     upstream's starting level 4, keep-start texts, no guild keep defense in
+     RvR; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "R6 fixes") implemented in
+     source, real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed

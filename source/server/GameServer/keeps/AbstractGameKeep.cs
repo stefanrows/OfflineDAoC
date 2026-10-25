@@ -875,7 +875,8 @@ namespace DOL.GS.Keeps
 			StopDeductionTimer();
 			StopChangeLevelTimer();
             DBKeep.NextLevelAt = DateTime.MinValue;
-			ChangeLevel((byte)ServerProperties.Properties.STARTING_KEEP_LEVEL);
+			// R6: RvR world upstream's starting level 4 (a released RvR keep never drops to 1); Camlann the property.
+			ChangeLevel(PvpKeepCampaign.StartingLevel());
 
 			foreach (GameKeepGuard guard in Guards.Values)
 			{
@@ -1160,7 +1161,7 @@ namespace DOL.GS.Keeps
 			PlayerMgr.BroadcastCapture(this);
 
             DBKeep.NextLevelAt = DateTime.MinValue;
-            Level = (byte)ServerProperties.Properties.STARTING_KEEP_LEVEL;
+            Level = PvpKeepCampaign.StartingLevel();
 
 			//if a guild holds the keep, we release it
 			if (Guild != null)

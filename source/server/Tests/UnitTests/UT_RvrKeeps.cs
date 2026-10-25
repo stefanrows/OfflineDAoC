@@ -257,6 +257,33 @@ public sealed class UT_RvrKeeps
         });
     }
 
+    // R6: a guild that gives up its keep leaves it at the world's starting level: RvR upstream's 4, Camlann the property.
+    [TestCase(WorldModelKind.Realm, 4, TestName = "RvR: a released keep drops to upstream's 4, never to 1")]
+    [TestCase(WorldModelKind.Camlann, 1, TestName = "Camlann: a released keep drops to starting_keep_level")]
+    public void AReleasedKeepDropsToTheWorldsStartingLevel(WorldModelKind world, int expected)
+    {
+        int saved = DOL.GS.ServerProperties.Properties.STARTING_KEEP_LEVEL;
+        DOL.GS.ServerProperties.Properties.STARTING_KEEP_LEVEL = 1;
+        try
+        {
+            using var _ = BothWorlds.Use(world);
+            // Guild's static constructor needs the test server (ServerScope); run alone, nothing else has built it yet.
+            using (new ServerScope(BothWorlds.Rules(world))) { }
+            Guild albionGuild = MakeGuild("alb-release", "Lions of Albion", eRealm.Albion);
+            using var saved5 = new SavedKeep(BothWorlds.Rules(world), eRealm.Albion, albionGuild, level: 5);
+
+            saved5.Keep.Release();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(saved5.Keep.Guild, Is.Null);
+                Assert.That(saved5.Keep.Level, Is.EqualTo(expected));
+                Assert.That(saved5.Keep.Realm, Is.EqualTo(eRealm.Albion), "a release keeps the realm");
+            });
+        }
+        finally { DOL.GS.ServerProperties.Properties.STARTING_KEEP_LEVEL = saved; }
+    }
+
     [Test]
     public void TheOwnRealmOrARealmLessKillerCapturesNothing()
     {

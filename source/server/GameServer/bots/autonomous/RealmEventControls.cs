@@ -95,6 +95,12 @@ namespace DOL.GS
                         bool raidAccepted = AutonomousRealmRaid.Start(request.TargetId, (eRealm)request.Realm, out string raidReason, forced: true);
                         Complete(request, raidAccepted, raidReason);
                     }
+                    // Upstream 0.38c (R6): the launcher's STOP EVENT ends a running expedition, forced or automatic.
+                    else if (request.Action == "stop" && request.Confirmed)
+                    {
+                        bool stopped = AutonomousRealmRaid.Stop(request.TargetId, out string stopReason);
+                        Complete(request, stopped, stopReason);
+                    }
                     else Complete(request, false, "Unknown action or missing confirmation.");
                     return;
                 }
@@ -102,6 +108,7 @@ namespace DOL.GS
                     .SelectMany(region => GameServer.KeepManager.GetKeepsOfRegion(region))
                     .FirstOrDefault(k => $"rvr-keep-{k.KeepID}" == request.TargetId && AutonomousRvrKeepPolicy.IsSiegeObjective(k));
                 if (keep == null) { Complete(request, false, "This is not an available keep event."); return; }
+                if (request.Action == "stop") { Complete(request, false, "Stop event is for dragon and epic dungeon expeditions; keep sieges end on their own."); return; }
                 if (request.Action == "reset-cooldown" && request.Confirmed)
                 {
                     bool reset = AutonomousRvrEventLayer.ResetCooldown(request.TargetId);

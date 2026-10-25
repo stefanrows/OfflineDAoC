@@ -14,8 +14,17 @@ public static class AutonomousSiegeMarch
 
     private sealed record MarchCache(long Tick, string Force, bool Marching);
 
+    /// <summary>
+    /// R6: the march restraint (no aggro on players, pursuits dropped, assists and pet assists filtered while the
+    /// keep plan is more than 6,500 away or the guild army is not released) is the fork's Camlann rule. The RvR
+    /// world runs upstream 0.38c, which has none: its column fights on the way and a quarter of it fighting at the
+    /// rear halts the march leader (AutonomousWorldBotController.RealmRally).
+    /// </summary>
+    public static bool RestrainsMarch(WorldModelKind world) => world != WorldModelKind.Realm;
+
     public static bool IsMarching(GameBot bot)
     {
+        if (!RestrainsMarch(WorldMode.Current)) return false;
         if (!IsWorldActor(bot) || !AutonomousObjectiveAssignments.Is(bot, eAutonomousObjectiveKind.RvR)) return false;
         string force = bot.TempProperties.GetProperty<string>("RvrEventForce") ?? $"rvr-{bot.DatabaseID}";
         long now = GameLoop.GameLoopTime;

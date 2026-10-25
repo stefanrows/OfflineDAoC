@@ -200,7 +200,7 @@ public static class WorldPicker
         string other = Name(WorldSaveLayout.Other(status.World));
         string tag = status.World == WorldSaveKind.Realm ? "rvr" : "camlann";
         string start = status.World == WorldSaveKind.Realm
-            ? "Keeps start neutral except the portal and relic keeps, the relics are home, and 600 bots per realm join single-realm guilds."
+            ? "The frontier keeps start owned by their original realm at their original level, the portal and relic keeps with their realm, the relics are home, and 600 bots per realm join single-realm guilds."
             : "Keeps start neutral, the relics are home, and 600 bots per realm join mixed guilds, as in the PvP world today.";
         string what = status.HasSave
             ? $"Reset the {world}?\n\nThe {world} starts over: new characters, companions, bots and guilds. Your account stays, as a normal player."

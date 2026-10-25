@@ -359,3 +359,27 @@ is false in Camlann). Anchors are today's `main` (90e523f3) lines of `Autonomous
     public static GameBot[][] PlanForcedRaid(eRealm realm) =>
         PlanForcedRaidCore(AutonomousRealmRaid.RaidsByRealm(WorldMode.Current) ? realm : eRealm.None);
    ```
+
+## R6 fixes (2026-10-25, review R6; implemented in source, real-client check pending)
+
+Worktree branch `rvr-r6fix` (not merged, no version). Rule: the RvR world (Realm-1) behaves like upstream 0.38c, Camlann
+unchanged. Server suite 5,102 passed / 7 failed (the bug 160 set) / 6 skipped; launcher 338 passed / 0 failed / 2 skipped.
+No live run.
+
+| Item | Upstream check | Fix | Player sees in Realm-1 |
+|---|---|---|---|
+| 1. Event layer never expired on the live clock | Upstream 0.38c has the same latent bug: `_lastExpireTick = long.MinValue`, every caller passes `GameLoop.GameLoopTime` (a positive stopwatch clock there, `GameLoopTime += delta` from 0 here), so `nowTick - last` overflows negative and the 500 ms throttle returns on every live call. Upstream's tests step their own ticks and never hit the throttle. | `RealmRvrEventLayer.Expire` treats `long.MinValue` as "never ran" (`Fork:` mark). Tests drive the rally on the live clock: extension, march, battle, repel; rally failure at the one-hour timer; throttle still skips calls within 500 ms. | Musters march at 12 (+5) minutes, sieges are repelled after 10 minutes without attackers, defense musters march, four-hour timers end sieges (live 18:06 siege with no march by 18:26). |
+| 2. Fork march restraint active in Realm-1 | Upstream has no such rule (the column fights; a quarter fighting at the rear halts the leader). | `AutonomousSiegeMarch.IsMarching` answers false in Realm-1 (`RestrainsMarch(world)`), which also lifts BotBrain's aggro refusal, the 20 s pursuit drop and the assist/pet-assist filters. Camlann unchanged. | Marching bots fight back and attack enemies they meet on the road. |
+| 3. Forced realm raids never ended | Upstream: forced raids have no clock; the launcher's STOP EVENT (`RealmEventControls` action `stop`, `AutonomousRealmRaid.Stop`) ends them, outcome "Stopped by player", no cooldown. | Ported verbatim: `Stop`, `StoppedByPlayer`, no cooldown after a stop, the snapshot publishes -1 / "starts when 200 are staged" for a clockless forced raid, keep events refuse `stop`. Launcher: STOP EVENT… button (dragon and epic dungeon rows that are running, confirmation dialog), "(no time limit)" in the Stage / battle column, "Stopped by player" in the records filter, the forced-start dialog describes the world's rule (RvR: no time limit, STOP EVENT; Camlann: 45/90 minutes as before). The action row wraps only below about 950 px. Stop works in both worlds (an explicit player action; Camlann's timed raids are otherwise unchanged). | A forced expedition can be called off from the launcher; its 300 reserved bots go back to their own goals at once. |
+| 4. starting_keep_level | Upstream default 4 (claim 5); Release, Reset and the capture realm points read it. | `PvpKeepCampaign.StartingLevel(world, property)`: Realm-1 4, Camlann the property (1). Used by `AbstractGameKeep.Release`/`Reset`, `AbstractServerRules.GetRealmPointsForKeep` (level - 4) and `/keep fastcreate`. The capture still runs the full level change when the level changed (RvR only). | A guild that releases an RvR keep leaves it at level 4, not 1; capture RPs count levels above 4. |
+| 7. Stale keep-start texts | - | World picker prompt and `ScrubPlayerState` comment: frontier keeps start owned by their original realm at their original level, portal and relic keeps with their realm. | The RvR world's create/reset dialog no longer says "Keeps start neutral". |
+| 8. Guild keep defense, orphaned comments | Upstream has no guild keep defense. | `AutonomousGuildKeepDefense.Applies(world)`: no alarms and no eligible bot in Realm-1 (BotBrain's call and the coordinator recall are skipped). Doc comments of `BotReleaseBindPoints.IsNearOwnBind` and `WorldMgr.GetTeleportLocation` moved back to their methods. | Bots of a guild are not pulled off their task to defend "their guild's" keep; the realm defense of the event layer answers. |
+
+Tests: UT_RvrR6Fixes (19 cases), UT_RvrKeeps release cases (2), launcher RealmEventsPresentationTests (stop button, timer,
+prompt; 10 cases) and a WorldPickerTests assertion.
+
+Not done (S4 / owner decision, unchanged): lord shield, no item loot, AutonomousGroupPace, battleground siege announcements,
+dashboard muster column, DF route, opt-in battleground goal, relic temple ownership, frontier porters, task mix, release
+immunity. Also not ported: upstream's `SupersedeAutomatic` (a forced expedition ending the realm's unstarted automatic
+rallies). Side finding, not fixed (Camlann wave, off in Realm-1): `BotBrain.SupportOffense` starts `_supportLastTurn` at
+`long.MinValue`, so the first fight of a bot skips its per-fight roll (same overflow pattern).

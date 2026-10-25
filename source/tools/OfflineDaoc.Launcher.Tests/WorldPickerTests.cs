@@ -280,12 +280,16 @@ public sealed class WorldPickerTests
         Assert.That(create, Does.Contain("copied from opendaoc-camlann.sqlite3.db; that save is only read"));
         Assert.That(create, Does.Contain("The PvP world (Camlann) is not changed"));
         Assert.That(create, Does.Contain("No save is replaced"));
+        // R6: the RvR world's frontier keeps start realm-owned (RvrKeepStart), not neutral.
+        Assert.That(create, Does.Contain("The frontier keeps start owned by their original realm at their original level"));
+        Assert.That(create, Does.Not.Contain("Keeps start neutral"));
 
         string reset = WorldPicker.CreationPrompt(WorldPicker.Inspect(_runtime, WorldSaveKind.Camlann), _camlann.Database, backups);
         Assert.That(reset, Does.StartWith("Reset the PvP world (Camlann)?"));
         Assert.That(reset, Does.Contain(Path.Combine(backups, "<date-time>-camlann-world-reset")));
         Assert.That(reset, Does.Contain("Nothing is deleted"));
         Assert.That(reset, Does.Contain("The RvR world is not changed"));
+        Assert.That(reset, Does.Contain("Keeps start neutral, the relics are home"), "the Camlann text is unchanged");
     }
 
     [Test]

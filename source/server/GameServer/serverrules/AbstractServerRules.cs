@@ -2872,7 +2872,8 @@ namespace DOL.GS.ServerRules
             }
 
             int value = rpBase + (keep.BaseLevel - 50) * rpMultiplier;
-            value += (keep.Level - Properties.STARTING_KEEP_LEVEL) * Properties.UPGRADE_MULTIPLIER;
+            // R6: the RvR world values levels above upstream's starting level 4; Camlann above the property.
+            value += (keep.Level - PvpKeepCampaign.StartingLevel()) * Properties.UPGRADE_MULTIPLIER;
             return value;
         }
 

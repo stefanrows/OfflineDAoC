@@ -1181,7 +1181,10 @@ public static partial class RealmRvrEventLayer
         if (nowTick == GameLoop.GameLoopTime)
         {
             long last = System.Threading.Interlocked.Read(ref _lastExpireTick);
-            if (nowTick >= last && nowTick - last < ExpireIntervalMilliseconds)
+            // Fork: upstream 0.38c compares against long.MinValue on the first call, so `nowTick - last` overflows
+            // to a negative number, the throttle always returns and the live clock never expires anything (muster
+            // deadline, extension, march, repel, defense muster, four-hour timer). The sentinel now means "never ran".
+            if (last != long.MinValue && nowTick >= last && nowTick - last < ExpireIntervalMilliseconds)
                 return;
             if (System.Threading.Interlocked.CompareExchange(ref _lastExpireTick, nowTick, last) != last)
                 return;

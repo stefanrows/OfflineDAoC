@@ -195,7 +195,7 @@ public class RealmEventsPresentationTests
         if (scale == 1) Assert.That(cooldown.Right, Is.LessThanOrEqualTo(grid.ClientSize.Width));
         var active = Field<CheckBox>("_eventActiveOnly");
         Assert.That(active.Parent!.ClientRectangle.Contains(active.Bounds), Is.True, "Active Events checkbox must fit the filter bar");
-        foreach (var button in new[] { Field<Button>("_eventStart"), Field<Button>("_eventReset") })
+        foreach (var button in new[] { Field<Button>("_eventStart"), Field<Button>("_eventReset"), Field<Button>("_eventStop") })
         {
             Control child = button;
             while (child != panel)
@@ -224,5 +224,55 @@ public class RealmEventsPresentationTests
         grid.CurrentCell = grid.Rows[0].Cells[0];
         Assert.That(Field<Button>("_eventStart").Enabled, Is.False);
         Assert.That(Field<Button>("_eventReset").Enabled, Is.False);
+    }
+
+    // R6 (upstream 0.38c): STOP EVENT ends a running dragon or epic dungeon expedition; keeps and idle rows cannot be stopped.
+    [Test]
+    public void StopEventIsOfferedOnlyForARunningExpeditionWhileTheServerRuns()
+    {
+        var grid = Field<DataGridView>("_rvrObjectivesGrid");
+        Field<TextBox>("_eventSearch").Text = "Golestandt";
+        grid.CurrentCell = grid.Rows[0].Cells[0];
+        Render();
+        Assert.That(Field<Button>("_eventStop").Enabled, Is.True, "a running dragon rally can be stopped");
+        Assert.That(Field<Button>("_eventStop").Text, Is.EqualTo("STOP EVENT…"));
+        Field<TextBox>("_eventSearch").Text = "Dun Ailinne";
+        grid.CurrentCell = grid.Rows[0].Cells[0];
+        Render();
+        Assert.That(Field<Button>("_eventStop").Enabled, Is.False, "keep sieges end on their own");
+        Field<TextBox>("_eventSearch").Text = "Golestandt";
+        grid.CurrentCell = grid.Rows[0].Cells[0];
+        Main.GetField("_rvrServerRunning", Hidden)!.SetValue(_form, false);
+        Render();
+        Assert.That(Field<Button>("_eventStop").Enabled, Is.False);
+    }
+
+    [TestCase("Dragon", true, ExpectedResult = true)]
+    [TestCase("Epic dungeon", true, ExpectedResult = true)]
+    [TestCase("Dragon", false, ExpectedResult = false)]
+    [TestCase("Keep", true, ExpectedResult = false)]
+    [TestCase("Relic", true, ExpectedResult = false)]
+    public bool OnlyRunningExpeditionsCanBeStopped(string kind, bool active) =>
+        (bool)Main.GetMethod("CanStopEvent", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [kind, active])!;
+
+    [TestCase("Staging", -1L, 0L, ExpectedResult = "Staging (no time limit)")]
+    [TestCase("Battle", -1L, 5000L, ExpectedResult = "Battle (no time limit)")]
+    [TestCase("Muster", 120_000L, 60_000L, ExpectedResult = "Muster 1:00")]
+    public string AForcedRvrExpeditionShowsNoTimeLimit(string phase, long remaining, long elapsed) =>
+        (string)Main.GetMethod("EventTimerText", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, [phase, remaining, elapsed])!;
+
+    [Test]
+    public void TheForcedExpeditionPromptDescribesTheWorldsRule()
+    {
+        var prompt = Main.GetMethod("ForcedExpeditionPrompt", BindingFlags.Static | BindingFlags.NonPublic)!;
+        string rvr = (string)prompt.Invoke(null, [true])!;
+        string camlann = (string)prompt.Invoke(null, [false])!;
+        Assert.Multiple(() =>
+        {
+            Assert.That(rvr, Does.Contain("has no time limit").And.Contain("STOP EVENT"));
+            Assert.That(rvr, Does.Not.Contain("45 minutes"));
+            Assert.That(camlann, Does.Contain("Preparation lasts at least 45 minutes").And.Contain("after 90 minutes"));
+            Assert.That(camlann, Does.Not.Contain("STOP EVENT"));
+        });
     }
 }

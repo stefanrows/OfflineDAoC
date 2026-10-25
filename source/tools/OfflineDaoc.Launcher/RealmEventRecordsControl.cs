@@ -26,7 +26,7 @@ internal sealed class RealmEventRecordsControl : UserControl
         var toolbar=new FlowLayoutPanel{Dock=DockStyle.Fill,AutoSize=true,WrapContents=true};
         _realm.Items.AddRange(["All realms","Albion","Midgard","Hibernia"]);
         _kind.Items.AddRange(["All events","Dragon","Epic dungeon","Keep","Relic keep","Relic"]);
-        _outcome.Items.AddRange(["All outcomes","In progress","Boss defeated","Failed rally","Timed out","Defended (timeout)","Captured","Captured / returned","Relic taken","Interrupted","Ended (unconfirmed)","Encounter unavailable"]);
+        _outcome.Items.AddRange(["All outcomes","In progress","Boss defeated","Failed rally","Stopped by player","Timed out","Defended (timeout)","Captured","Captured / returned","Relic taken","Interrupted","Ended (unconfirmed)","Encounter unavailable"]);
         _realm.SelectedIndex=_kind.SelectedIndex=_outcome.SelectedIndex=0;
         foreach(Control input in new Control[]{_realm,_kind,_outcome,_search})DaocTheme.StyleInput(input);
         toolbar.Controls.AddRange([_realm,_kind,_outcome,_search,_refresh]);layout.Controls.Add(toolbar,0,0);

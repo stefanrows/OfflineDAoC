@@ -43,10 +43,6 @@ namespace DOL.GS
                 (int)System.Math.Round(floor.Value.Y), (int)System.Math.Round(floor.Value.Z));
         }
 
-        /// <summary>
-        /// Whether a point lies within <paramref name="radius"/> of one of the
-        /// realm's own bindstones in that region (bug 63: bind-point peace).
-        /// </summary>
         /// <summary>True within <paramref name="clearance"/> of any bindstone of the region (its collision is not in the
         /// navmesh). Upstream 0.38c (town teleporter stand-off points).</summary>
         public static bool IsNearBindstone(ushort region, float x, float y, float z, float clearance) =>
@@ -54,6 +50,10 @@ namespace DOL.GS
             points.Any(bind => System.Math.Abs(z - bind.Point.Z) <= 200 &&
                 (x - bind.Point.X) * (x - bind.Point.X) + (y - bind.Point.Y) * (y - bind.Point.Y) <= clearance * clearance);
 
+        /// <summary>
+        /// Whether a point lies within <paramref name="radius"/> of one of the
+        /// realm's own bindstones in that region (bug 63: bind-point peace).
+        /// </summary>
         public static bool IsNearOwnBind(ushort region, float x, float y, eRealm realm, int radius)
         {
             if (realm == eRealm.None || !Regions.TryGetValue(region, out Bind[] points)) return false;

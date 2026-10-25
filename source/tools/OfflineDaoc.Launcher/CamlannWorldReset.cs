@@ -96,8 +96,9 @@ public static class CamlannWorldReset
     /// The reset steps every fresh world shares (docs/RVR_WORLDS.md): characters, inventories, bots, companions,
     /// accounts except the local one, guilds except the dummy guild, Realm Exchange, keep claims and capture logs
     /// cleared, relics homed. Keeps start as the world says: all neutral in the Camlann world; in the RvR world
-    /// portal and relic keeps start with their original realm, every other keep neutral. Runs inside the caller's
-    /// transaction, so a failure leaves nothing half done.
+    /// portal and relic keeps start with their original realm, and the frontier keeps start owned by their original
+    /// realm at their original level (<see cref="ResetKeeps"/>); the battleground keeps stay neutral. Runs inside the
+    /// caller's transaction, so a failure leaves nothing half done.
     /// </summary>
     internal static ScrubCounts ScrubPlayerState(SQLiteConnection connection, SQLiteTransaction transaction,
         string localAccount, WorldSaveKind world)

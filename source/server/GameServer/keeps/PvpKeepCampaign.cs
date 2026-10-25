@@ -31,6 +31,16 @@ namespace DOL.GS.Keeps
         /// <summary>The level a keep stands at after a realm capture: Camlann the Warden level, RvR world upstream's 4.</summary>
         public static byte CaptureLevel(WorldModelKind world) => world == WorldModelKind.Realm ? RvrCaptureLevel : WardenKeepLevel;
 
+        /// <summary>starting_keep_level by world (R6): the RvR world uses upstream 0.38c's default 4 wherever the
+        /// upstream code reads the property (a capture's reset, a guild's release, the capture realm points); Camlann
+        /// reads the property (1 in the fork's save). The saved property row stays as it is in both worlds.</summary>
+        public static byte StartingLevel(WorldModelKind world, int startingLevelProperty) =>
+            world == WorldModelKind.Realm ? RvrCaptureLevel : (byte)startingLevelProperty;
+
+        /// <summary><see cref="StartingLevel(WorldModelKind, int)"/> for the running world and its property.</summary>
+        public static byte StartingLevel() =>
+            StartingLevel(WorldMode.Current, ServerProperties.Properties.STARTING_KEEP_LEVEL);
+
         /// <summary>The level a guild claim sets: RvR world upstream's 5, Camlann starting_keep_claim_level.</summary>
         public static byte ClaimLevel(WorldModelKind world, int claimLevelProperty) =>
             world == WorldModelKind.Realm ? RvrClaimLevel : (byte)claimLevelProperty;
@@ -323,6 +333,7 @@ namespace DOL.GS.Keeps
                 return false;
             }
             eRealm previous = keep.Realm;
+            byte previousLevel = keep.Level;
             string previousOwner = keep.Guild?.Name ?? string.Empty;
             if (!CaptureChangesOwner(previous, IsGarrison(keep.Guild), captor))
             {
@@ -336,7 +347,9 @@ namespace DOL.GS.Keeps
             keep.Reset(captor);
             mark = LogSlowKeepStep(keep, "realm_capture", "reset", mark);
             byte captureLevel = CaptureLevel(WorldMode.Current);
-            if (!keep.IsRelic && keep.Level != captureLevel)
+            // R6: the RvR world's reset already writes level 4 (StartingLevel); a keep that stood at another level
+            // still gets the full level change (components, guards, patrols), as before. Camlann unchanged.
+            if (!keep.IsRelic && (keep.Level != captureLevel || WorldMode.IsRvr && previousLevel != captureLevel))
             {
                 keep.ChangeLevel(captureLevel);
                 mark = LogSlowKeepStep(keep, "realm_capture", "change_level", mark);

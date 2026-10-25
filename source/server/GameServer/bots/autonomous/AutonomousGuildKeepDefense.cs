@@ -21,7 +21,11 @@ public static class AutonomousGuildKeepDefense
     private static readonly Dictionary<GameBot, AbstractGameKeep> Prepared = new();
     private static long _nextPulse;
 
-    public static bool Eligible(GameBot bot) => AutonomousSiegeMarch.IsWorldActor(bot);
+    /// <summary>R6: guild keep defense is the fork's Camlann rule (a guild is a side there). The RvR world runs
+    /// upstream 0.38c, where a keep under attack raises the realm's defense through the event layer only.</summary>
+    public static bool Applies(WorldModelKind world) => world != WorldModelKind.Realm;
+
+    public static bool Eligible(GameBot bot) => Applies(WorldMode.Current) && AutonomousSiegeMarch.IsWorldActor(bot);
 
     // Live run 0.242.0: a recall of the guild's world keep pulled open-BG crew out of their units (9 straggler
     // drops) and out of the battleground's groups. The open BG roster owns its crew until it leaves.
@@ -35,6 +39,8 @@ public static class AutonomousGuildKeepDefense
     {
         // Gothwaite PvP mode: keep attacks never recall world-bot guild troops (section 5.4).
         if (GothwaitePvpRules.SuppressesWorldRecruitment) return;
+        // R6: no guild alarms in the RvR world (Applies).
+        if (!Applies(WorldMode.Current)) return;
         Guild owner = keep?.Guild;
         // A battleground keep is defended by that battleground's crew inside its region;
         // the guild's world bots are never recalled to it (0.242.0: 52 bots, keep 11).

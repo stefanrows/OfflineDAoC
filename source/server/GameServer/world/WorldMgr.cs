@@ -72,6 +72,18 @@ namespace DOL.GS
 		private static Dictionary<eRealm, Dictionary<string, DbTeleport>> m_teleportLocations;
 		private static readonly Lock _syncTeleport = new();
 
+		/// <summary>Every destination of one teleporter type offered to a realm (bot travel planning; upstream 0.38c).</summary>
+		public static DbTeleport[] GetTeleportLocations(eRealm realm, string type)
+		{
+			lock (_syncTeleport)
+			{
+				if (m_teleportLocations == null || !m_teleportLocations.TryGetValue(realm, out Dictionary<string, DbTeleport> locations))
+					return [];
+				string prefix = (type ?? string.Empty) + ":";
+				return locations.Where(pair => pair.Key.StartsWith(prefix, StringComparison.Ordinal)).Select(pair => pair.Value).ToArray();
+			}
+		}
+
 		/// <summary>
 		/// Returns the teleport given an ID and a realm
 		/// </summary>
@@ -88,18 +100,6 @@ namespace DOL.GS
 		/// </param>
 		/// <param name="teleportKey">Composite key into teleport dictionary.</param>
 		/// <returns></returns>
-		/// <summary>Every destination of one teleporter type offered to a realm (bot travel planning; upstream 0.38c).</summary>
-		public static DbTeleport[] GetTeleportLocations(eRealm realm, string type)
-		{
-			lock (_syncTeleport)
-			{
-				if (m_teleportLocations == null || !m_teleportLocations.TryGetValue(realm, out Dictionary<string, DbTeleport> locations))
-					return [];
-				string prefix = (type ?? string.Empty) + ":";
-				return locations.Where(pair => pair.Key.StartsWith(prefix, StringComparison.Ordinal)).Select(pair => pair.Value).ToArray();
-			}
-		}
-
 		public static DbTeleport GetTeleportLocation(eRealm realm, string teleportKey)
 		{
 			lock (_syncTeleport)
