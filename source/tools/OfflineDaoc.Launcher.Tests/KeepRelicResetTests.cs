@@ -47,6 +47,23 @@ public class KeepRelicResetTests
         Apply();
         Assert.That(Sql("SELECT count(*) FROM Relic WHERE Realm=OriginalRealm"), Is.EqualTo(6L));
     }
+    [Test] public void RvrWorldResetReturnsPortalAndRelicKeepsToTheirRealm()
+    {
+        Sql("ALTER TABLE [Keep] ADD COLUMN BaseLevel INT NOT NULL DEFAULT 50; ALTER TABLE [Keep] ADD COLUMN SkinType INT NOT NULL DEFAULT 0;" +
+            "INSERT INTO [Keep](KeepID,Realm,OriginalRealm,ClaimedGuildName,ClaimedAt,Level,BaseLevel,SkinType) VALUES" +
+            "(3,0,2,'','',1,255,0),(4,1,3,'Raiders','',1,60,99);" +
+            "INSERT INTO offline_local_options VALUES('WorldModel','Realm-1');");
+
+        Apply();
+
+        Assert.That(Sql("SELECT group_concat(KeepID || ':' || Realm, ',') FROM (SELECT * FROM [Keep] ORDER BY KeepID)"), Is.EqualTo("1:0,2:0,3:2,4:3"),
+            "ordinary keeps neutral, portal keep 3 Midgard, relic keep 4 Hibernia");
+        Assert.That(Sql("SELECT count(*) FROM [Keep] WHERE ClaimedGuildName<>''"), Is.EqualTo(0L));
+
+        Sql("UPDATE offline_local_options SET Value='Camlann-1' WHERE Key='WorldModel'");
+        Apply();
+        Assert.That(Sql("SELECT count(*) FROM [Keep] WHERE Realm<>0"), Is.EqualTo(0L), "the Camlann world keeps every keep neutral");
+    }
     [Test] public void RunningServerCannotChangeAnything()
     {
         Assert.Throws<InvalidOperationException>(() => Apply(() => false));

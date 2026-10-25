@@ -29,7 +29,8 @@ public static class AutonomousBotDashboard
     private static int _writing;
     private static string _lastRequestId = string.Empty;
 
-    public static string FilePath => Path.Combine(AppContext.BaseDirectory, "bot-world.json");
+    // Per save (bot-world-camlann.json for the Camlann save); the request file is a live protocol and stays shared.
+    public static string FilePath => WorldSaveFiles.ServerFile(OfflineDaoc.Configuration.WorldSaveLayout.BotWorldFileName);
     public static string RequestPath => Path.Combine(AppContext.BaseDirectory, "bot-world.request");
 
     [GameServerStartedEvent]

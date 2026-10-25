@@ -19,7 +19,8 @@ public static class AutonomousRvrDashboard
     private static int _writing;
     private static readonly object HandlerSync = new();
     private static bool _handlersRegistered;
-    public static string FilePath => Path.Combine(AppContext.BaseDirectory, "rvr-world.json");
+    // Per save: rvr-world-camlann.json for the Camlann save (docs/RVR_WORLDS.md).
+    public static string FilePath => WorldSaveFiles.ServerFile(OfflineDaoc.Configuration.WorldSaveLayout.RvrWorldFileName);
     public static void RequestPublish()
     {
         try { _timer?.Change(1, 30_000); }

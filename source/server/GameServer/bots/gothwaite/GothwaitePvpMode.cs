@@ -21,7 +21,8 @@ public static class GothwaitePvpMode
     /// <summary>Reads the switch once. A broken file keeps the mode off and logs why.</summary>
     public static void Initialize(string serverDirectory)
     {
-        string path = Path.Combine(serverDirectory ?? string.Empty, GothwaitePvpSettings.FileName);
+        // Per save: gothwaite-pvp-camlann.json beside the Camlann save (docs/RVR_WORLDS.md).
+        string path = WorldSaveFiles.InDirectory(serverDirectory ?? string.Empty, GothwaitePvpSettings.FileName);
         GothwaitePvpSettings settings;
         try
         {

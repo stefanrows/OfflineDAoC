@@ -17,6 +17,7 @@
     <Compile Include="../../server/GameServer/bots/autonomous/PopulationBenchmarks.cs" Link="Configuration/PopulationBenchmarks.cs" />
     <Compile Include="../../server/GameServer/bots/gothwaite/GothwaitePvpSettings.cs" Link="Configuration/GothwaitePvpSettings.cs" />
     <Compile Include="../../server/GameServer/bots/autonomous/RealmEventRecordStore.cs" Link="Records/RealmEventRecordStore.cs" />
+    <Compile Include="../../server/GameServer/world/WorldSaveLayout.cs" Link="Configuration/WorldSaveLayout.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Join Friend.cmd" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

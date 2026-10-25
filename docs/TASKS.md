@@ -18,6 +18,9 @@ When a task is done and its required verification is complete, move it out of it
      R1b (alliance core, enemy names hidden, server-type audit in
      [RVR_RULES_AUDIT.md](RVR_RULES_AUDIT.md)) implemented in source,
      real-client check pending.
+     R5a (fresh RvR and fresh Camlann world routines, per-world save and side
+     files, single-realm bot guild seeding; [RVR_WORLDS.md](RVR_WORLDS.md)):
+     implemented in source, real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed

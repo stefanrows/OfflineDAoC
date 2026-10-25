@@ -1,4 +1,5 @@
 using System.Data.SQLite;
+using OfflineDaoc.Configuration;
 
 namespace OfflineDaoc.Launcher;
 
@@ -69,55 +70,12 @@ public static class CamlannWorldReset
         string backup = CreateBackup(database, backupDirectory, eventRecordsPath);
         int eventRecords = CountEventRecords(eventRecordsPath);
 
-        int characters;
-        int bots;
-        int guilds;
-        int keeps;
-        int relics;
+        ScrubCounts counts;
 
         using (var connection = Open(database, false))
         using (var transaction = connection.BeginTransaction(System.Data.IsolationLevel.Serializable))
         {
-            EnsureLocalOptionsTable(connection, transaction);
-
-            characters = Count(connection, transaction, "DOLCharacters");
-            bots = Count(connection, transaction, "offline_world_bots");
-            guilds = Count(connection, transaction, "Guild", "GuildName<>@dummy", ("@dummy", DummyGuildName));
-            keeps = Count(connection, transaction, "Keep");
-            relics = Count(connection, transaction, "Relic");
-
-            RequireLocalAccount(connection, transaction, localAccount);
-            DeletePlayerInventory(connection, transaction);
-            foreach (string table in new[]
-            {
-                "DOLCharactersXCustomParam", "DOLCharactersBackupXCustomParam", "CharacterXDataQuest",
-                "CharacterXMasterLevel", "CharacterXOneTimeDrop", "FactionAggroLevel", "PlayerXEffect",
-                "Quest", "Task", "TimeXLevel", "SinglePermission", "DOLCharacters", "DOLCharactersBackup",
-                "PlayerInfo", "PlayerBoats", "CraftedItem", "ItemUnique"
-            })
-                DeleteAll(connection, transaction, table);
-
-            foreach (string table in new[]
-            {
-                "bot_settings", "bot_profiles", "offline_bot_commands", "offline_world_bots",
-                "offline_auction_escrow", "offline_auction_ledger", "offline_auction_listings",
-                "realm_exchange_sales", "player_companions"
-            })
-                DeleteAll(connection, transaction, table);
-
-            foreach (string table in new[] { "AccountXCrafting", "AccountXMoney", "AccountXCustomParam" })
-                DeleteAll(connection, transaction, table);
-            DeleteExceptLocalAccount(connection, transaction, localAccount);
-
-            foreach (string table in new[] { "GuildRank", "GuildAlliance" })
-                DeleteAllExceptDummyGuild(connection, transaction, table);
-            DeleteGuildsExceptDummy(connection, transaction);
-
-            ResetKeeps(connection, transaction);
-            ResetRelics(connection, transaction);
-
-            foreach (string table in new[] { "KeepCaptureLog", "News", "serverstats" })
-                DeleteAll(connection, transaction, table);
+            counts = ScrubPlayerState(connection, transaction, localAccount, WorldSaveKind.Camlann);
 
             UpsertOption(connection, transaction, WorldModelKey, WorldModelValue);
             UpsertOption(connection, transaction, ResetUtcKey, now.ToString("O"));
@@ -128,10 +86,67 @@ public static class CamlannWorldReset
         if (!string.IsNullOrWhiteSpace(eventRecordsPath))
             ClearEventRecords(eventRecordsPath);
 
-        return new(false, characters, bots, guilds, keeps, relics, eventRecords, backup, now);
+        return new(false, counts.Characters, counts.Bots, counts.Guilds, counts.Keeps, counts.Relics, eventRecords, backup, now);
     }
 
-    private static SQLiteConnection Open(string database, bool readOnly)
+    /// <summary>What a scrub found before it cleared the save.</summary>
+    internal sealed record ScrubCounts(int Characters, int Bots, int Guilds, int Keeps, int Relics, int RealmKeeps);
+
+    /// <summary>
+    /// The reset steps every fresh world shares (docs/RVR_WORLDS.md): characters, inventories, bots, companions,
+    /// accounts except the local one, guilds except the dummy guild, Realm Exchange, keep claims and capture logs
+    /// cleared, relics homed. Keeps start as the world says: all neutral in the Camlann world; in the RvR world
+    /// portal and relic keeps start with their original realm, every other keep neutral. Runs inside the caller's
+    /// transaction, so a failure leaves nothing half done.
+    /// </summary>
+    internal static ScrubCounts ScrubPlayerState(SQLiteConnection connection, SQLiteTransaction transaction,
+        string localAccount, WorldSaveKind world)
+    {
+        EnsureLocalOptionsTable(connection, transaction);
+
+        int characters = Count(connection, transaction, "DOLCharacters");
+        int bots = Count(connection, transaction, "offline_world_bots");
+        int guilds = Count(connection, transaction, "Guild", "GuildName<>@dummy", ("@dummy", DummyGuildName));
+        int keeps = Count(connection, transaction, "Keep");
+        int relics = Count(connection, transaction, "Relic");
+
+        RequireLocalAccount(connection, transaction, localAccount);
+        DeletePlayerInventory(connection, transaction);
+        foreach (string table in new[]
+        {
+            "DOLCharactersXCustomParam", "DOLCharactersBackupXCustomParam", "CharacterXDataQuest",
+            "CharacterXMasterLevel", "CharacterXOneTimeDrop", "FactionAggroLevel", "PlayerXEffect",
+            "Quest", "Task", "TimeXLevel", "SinglePermission", "DOLCharacters", "DOLCharactersBackup",
+            "PlayerInfo", "PlayerBoats", "CraftedItem", "ItemUnique"
+        })
+            DeleteAll(connection, transaction, table);
+
+        foreach (string table in new[]
+        {
+            "bot_settings", "bot_profiles", "offline_bot_commands", "offline_world_bots",
+            "offline_auction_escrow", "offline_auction_ledger", "offline_auction_listings",
+            "realm_exchange_sales", "player_companions"
+        })
+            DeleteAll(connection, transaction, table);
+
+        foreach (string table in new[] { "AccountXCrafting", "AccountXMoney", "AccountXCustomParam" })
+            DeleteAll(connection, transaction, table);
+        DeleteExceptLocalAccount(connection, transaction, localAccount);
+
+        foreach (string table in new[] { "GuildRank", "GuildAlliance" })
+            DeleteAllExceptDummyGuild(connection, transaction, table);
+        DeleteGuildsExceptDummy(connection, transaction);
+
+        int realmKeeps = ResetKeeps(connection, transaction, world);
+        ResetRelics(connection, transaction);
+
+        foreach (string table in new[] { "KeepCaptureLog", "News", "serverstats" })
+            DeleteAll(connection, transaction, table);
+
+        return new(characters, bots, guilds, keeps, relics, realmKeeps);
+    }
+
+    internal static SQLiteConnection Open(string database, bool readOnly)
     {
         var connection = new SQLiteConnection(new SQLiteConnectionStringBuilder
         {
@@ -145,13 +160,13 @@ public static class CamlannWorldReset
         return connection;
     }
 
-    private static void RequireStopped(Func<bool> serverStopped)
+    internal static void RequireStopped(Func<bool> serverStopped)
     {
         if (!serverStopped())
             throw new InvalidOperationException("Stop the server completely before creating the new world.");
     }
 
-    private static void EnsureNoSQLiteSidecars(string? database)
+    internal static void EnsureNoSQLiteSidecars(string? database)
     {
         if (string.IsNullOrWhiteSpace(database))
             return;
@@ -173,7 +188,7 @@ public static class CamlannWorldReset
         return directory;
     }
 
-    private static bool TableExists(SQLiteConnection connection, string table)
+    internal static bool TableExists(SQLiteConnection connection, string table)
     {
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=@table LIMIT 1";
@@ -181,7 +196,7 @@ public static class CamlannWorldReset
         return command.ExecuteScalar() is not null;
     }
 
-    private static bool ColumnExists(SQLiteConnection connection, SQLiteTransaction transaction, string table, string column)
+    internal static bool ColumnExists(SQLiteConnection connection, SQLiteTransaction transaction, string table, string column)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -193,7 +208,7 @@ public static class CamlannWorldReset
         return false;
     }
 
-    private static int Count(SQLiteConnection connection, SQLiteTransaction transaction, string table, string? predicate = null, params (string Name, object Value)[] parameters)
+    internal static int Count(SQLiteConnection connection, SQLiteTransaction transaction, string table, string? predicate = null, params (string Name, object Value)[] parameters)
     {
         if (!TableExists(connection, table))
             return 0;
@@ -231,7 +246,7 @@ public static class CamlannWorldReset
         command.ExecuteNonQuery();
     }
 
-    private static void DeleteAll(SQLiteConnection connection, SQLiteTransaction transaction, string table)
+    internal static void DeleteAll(SQLiteConnection connection, SQLiteTransaction transaction, string table)
     {
         if (!TableExists(connection, table))
             return;
@@ -289,7 +304,12 @@ public static class CamlannWorldReset
         command.ExecuteNonQuery();
     }
 
-    private static void ResetKeeps(SQLiteConnection connection, SQLiteTransaction transaction)
+    /// <summary>
+    /// The keep start of a fresh world; returns how many keeps start with a realm. Camlann: every keep realm 0, no guild.
+    /// RvR (spec section 4.1): portal keeps (base level 100 or more, the server's IsPortalKeep) and relic keeps (skin 99,
+    /// the server's IsRelic) start with their original realm; every other keep starts neutral for the Frontier Wardens.
+    /// </summary>
+    internal static int ResetKeeps(SQLiteConnection connection, SQLiteTransaction transaction, WorldSaveKind world = WorldSaveKind.Camlann)
     {
         if (!TableExists(connection, "Keep"))
             throw new InvalidOperationException("Keep data is missing; the new world was not created.");
@@ -299,6 +319,15 @@ public static class CamlannWorldReset
             ? "UPDATE [Keep] SET Realm=0, ClaimedGuildName='', ClaimedAt='0001-01-01T00:00:00.0000000Z'"
             : "UPDATE [Keep] SET Realm=0, ClaimedGuildName=''";
         command.ExecuteNonQuery();
+        int realmKeeps = 0;
+        if (world == WorldSaveKind.Realm)
+        {
+            foreach (string column in new[] { "OriginalRealm", "BaseLevel", "SkinType" })
+                if (!ColumnExists(connection, transaction, "Keep", column))
+                    throw new InvalidOperationException($"Keep data has no {column} column; the new RvR world was not created.");
+            command.CommandText = "UPDATE [Keep] SET Realm=OriginalRealm WHERE OriginalRealm BETWEEN 1 AND 3 AND (BaseLevel>=100 OR SkinType=99)";
+            realmKeeps = command.ExecuteNonQuery();
+        }
         if (ColumnExists(connection, transaction, "Keep", "LordDefeated"))
         {
             command.CommandText = "UPDATE [Keep] SET LordDefeated=0";
@@ -309,6 +338,7 @@ public static class CamlannWorldReset
             command.CommandText = "UPDATE [Keep] SET LastCaptureRewardAt='0001-01-01T00:00:00.0000000Z'";
             command.ExecuteNonQuery();
         }
+        return realmKeeps;
     }
 
     private static void ResetRelics(SQLiteConnection connection, SQLiteTransaction transaction)
@@ -369,7 +399,7 @@ public static class CamlannWorldReset
         }
     }
 
-    private static void UpsertOption(SQLiteConnection connection, SQLiteTransaction transaction, string key, string value)
+    internal static void UpsertOption(SQLiteConnection connection, SQLiteTransaction transaction, string key, string value)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;

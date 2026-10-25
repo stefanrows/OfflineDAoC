@@ -12,6 +12,30 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.335.0] - 2026-10-25
+
+### Added
+- RvR mode, package R5a (`docs/RVR_WORLDS.md`): the launcher can create a
+  fresh RvR world or a fresh Camlann world. The old save and its side files
+  are moved to `playable-backups/<timestamp>-<world>-world-reset/`, never
+  deleted; the new save carries the world marker, today's rates, 600 world
+  bots per realm (single-realm guilds in RvR), neutral keeps except portal
+  and relic keeps, relics at home, the local account as a normal player. Each
+  world keeps its own save file (`opendaoc.sqlite3.db` for RvR,
+  `opendaoc-camlann.sqlite3.db` for Camlann) and side files; the server
+  config points at the selected world. The world picker itself follows in
+  R5b. Launcher WorldResetTests (24), server tests UT_WorldSaveLayout,
+  UT_AutonomousGuildSeeding, UT_FreshWorldSave.
+
+### Changed
+- The Gothwaite PvP switch is locked off for a `Realm-1` save.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.334.0] - 2026-10-25
 
 ### Added

@@ -67,6 +67,15 @@ public static class KeepRelicReset
             ? "UPDATE [Keep] SET Realm=0, ClaimedGuildName='', ClaimedAt='0001-01-01T00:00:00.0000000Z'"
             : "UPDATE [Keep] SET Realm=0, ClaimedGuildName=''";
         int count = command.ExecuteNonQuery();
+        // The RvR world's start (docs/RVR_WORLDS.md): portal and relic keeps return to their original realm.
+        bool realmWorld = Read("SELECT name FROM sqlite_master WHERE type='table' AND name='offline_local_options'").Count == 1 &&
+                          Read("SELECT Value FROM offline_local_options WHERE Key='WorldModel'")
+                              .Any(row => string.Equals(row["Value"]?.ToString(), OfflineDaoc.Configuration.WorldSaveLayout.RealmMarker, StringComparison.Ordinal));
+        if (realmWorld && HasColumn("Keep", "BaseLevel") && HasColumn("Keep", "SkinType"))
+        {
+            command.CommandText = "UPDATE [Keep] SET Realm=OriginalRealm WHERE OriginalRealm BETWEEN 1 AND 3 AND (BaseLevel>=100 OR SkinType=99)";
+            command.ExecuteNonQuery();
+        }
         if (HasColumn("Keep", "LordDefeated"))
         {
             command.CommandText = "UPDATE [Keep] SET LordDefeated=0";

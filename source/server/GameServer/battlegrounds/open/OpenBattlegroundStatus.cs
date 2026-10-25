@@ -72,7 +72,8 @@ namespace DOL.GS
         private static int _writing;
         private static bool _warned;
 
-        public static string FilePath => Path.Combine(AppContext.BaseDirectory, FileName);
+        /// <summary>Per save: open-bg-status-camlann.json beside the Camlann save (docs/RVR_WORLDS.md).</summary>
+        public static string FilePath => WorldSaveFiles.ServerFile(FileName);
 
         /// <summary>The unit leader shown in the status: the group's living leader (a bot leader is not a GamePlayer, so <c>Group.Leader</c> is null for it), a solo or leaderless group is its own leader.</summary>
         public static string UnitLeaderName(string livingLeaderName, string botName) =>

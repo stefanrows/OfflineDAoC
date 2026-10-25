@@ -9,7 +9,7 @@ namespace OfflineDaoc.Launcher;
 
 internal sealed partial class MainForm : Form
 {
-    internal const string DisplayVersion = "0.334.0";
+    internal const string DisplayVersion = "0.335.0";
     internal const int AutoRefreshMilliseconds = 5 * 60 * 1000;
     internal const int RvrSnapshotRefreshMilliseconds = 30 * 1000;
     internal const int LiveBotSnapshotMaxAgeMilliseconds = 20_000;
@@ -18,6 +18,8 @@ internal sealed partial class MainForm : Form
     private readonly string _root = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
     private readonly string _database;
     private readonly string _serverDirectory;
+    // The save's per-world side files (docs/RVR_WORLDS.md); R5b points _database at the chosen world.
+    private readonly WorldFiles _worldFiles;
     private readonly string _worldSpeedRequestPath;
     private readonly string _worldSpeedStatusPath;
     private readonly string _serverExecutable;
@@ -231,6 +233,7 @@ internal sealed partial class MainForm : Form
     {
         _database = Path.Combine(_root, "data", "opendaoc.sqlite3.db");
         _serverDirectory = Path.Combine(_root, "server");
+        _worldFiles = WorldFiles.ForDatabase(_serverDirectory, _database);
         _worldSpeedRequestPath = Path.Combine(_serverDirectory, WorldSpeedProtocol.RequestFileName);
         _worldSpeedStatusPath = Path.Combine(_serverDirectory, WorldSpeedProtocol.StatusFileName);
         _serverExecutable = Path.Combine(_serverDirectory, "CoreServer.exe");
@@ -716,7 +719,7 @@ internal sealed partial class MainForm : Form
         events.Controls.Add(BuildRealmEventsPanel());
         tabs.TabPages.Add(events);
         var records = new TabPage("Realm Records") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
-        var eventRecords = new RealmEventRecordsControl(Path.Combine(_serverDirectory, "realm-event-records.sqlite3"));
+        var eventRecords = new RealmEventRecordsControl(_worldFiles.EventRecords);
         records.Controls.Add(eventRecords);
         records.Enter += async (_, _) => await eventRecords.RefreshAsync();
         tabs.TabPages.Add(records);
@@ -728,12 +731,17 @@ internal sealed partial class MainForm : Form
             _worldSpeedStatusPath,
             Path.Combine(_serverDirectory, PopulationTypeMixProtocol.RequestFileName),
             BotGoalsServerStopped, () => _bots.Count(bot => bot.BotId.HasValue && !bot.DeletionQueued),
-            () => SaveDatabaseBackup.Create(_database, Path.Combine(Path.GetDirectoryName(_database)!, "gothwaite-pvp-backups"), "gothwaite-pvp"));
+            () => SaveDatabaseBackup.Create(_database, Path.Combine(Path.GetDirectoryName(_database)!, "gothwaite-pvp-backups"), "gothwaite-pvp"),
+            _worldFiles.GothwaiteSwitch)
+        {
+            // Owner decision 18: no Gothwaite PvP in the RvR world. Until R5b's picker, the current save's marker decides.
+            IsRvrWorld = () => string.Equals(CamlannWorldReset.ReadWorldModel(_database), WorldSaveLayout.RealmMarker, StringComparison.Ordinal),
+        };
         botGoals.Controls.Add(_botGoalsSettings);
         tabs.TabPages.Add(botGoals);
         var openBg = new TabPage("open BG") { BackColor = DaocTheme.Panel, ForeColor = DaocTheme.Text };
         _openBgSettings = new OpenBgSettingsControl(_database,
-            Path.Combine(_serverDirectory, OpenBgLiveStatus.FileName), BotGoalsServerStopped);
+            _worldFiles.OpenBgStatus, BotGoalsServerStopped);
         openBg.Controls.Add(_openBgSettings);
         tabs.TabPages.Add(openBg);
         tabs.TabPages.Add(auction);
@@ -2461,7 +2469,7 @@ internal sealed partial class MainForm : Form
 
     private LiveBotSnapshot? TryReadLiveBotSnapshot()
     {
-        string path = Path.Combine(_serverDirectory, "bot-world.json");
+        string path = _worldFiles.BotWorld;
         if (!File.Exists(path))
             return null;
         try
@@ -2757,7 +2765,7 @@ internal sealed partial class MainForm : Form
     {
         try
         {
-            string path = Path.Combine(serverDirectory, "rvr-world.json");
+            string path = WorldSaveLayout.SideFilePath(serverDirectory, WorldSaveLayout.RvrWorldFileName, database);
             if (!File.Exists(path) || new FileInfo(path).Length > 4_000_000) return null;
             var snapshot = System.Text.Json.JsonSerializer.Deserialize<RvrWorldSnapshot>(File.ReadAllText(path));
             DateTime resetUtc = KeepRelicReset.ReadResetUtc(database);
@@ -2941,145 +2949,11 @@ internal sealed partial class MainForm : Form
         }
 
         using var transaction = connection.BeginTransaction();
-        var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        using (var names = connection.CreateCommand())
-        {
-            names.Transaction = transaction;
-            names.CommandText = "SELECT Name FROM offline_world_bots UNION SELECT Name FROM DOLCharacters";
-            using var reader = names.ExecuteReader();
-            while (reader.Read()) reserved.Add(reader.GetString(0));
-        }
-
-        var identities = new List<BotCharacterGenerator.Identity>(count);
-        for (int index = 0; index < count; index++)
-        {
-            int newLevel = levels[index];
-            BotCharacterGenerator.Identity identity = BotCharacterGenerator.Generate(realm, reserved);
-            BotStartingLocation start = newLevel >= 20
-                ? CapitalBotStartingLocation(identity.Realm)
-                : ChooseBotStartingLocation(connection, transaction, identity.Realm, identity.RaceId, identity.ClassId);
-            identities.Add(identity);
-            string now = DateTime.UtcNow.ToString("O");
-            using var insert = connection.CreateCommand();
-            insert.Transaction = transaction;
-            insert.CommandText = """
-                INSERT INTO offline_world_bots
-                    (Name, Realm, ClassId, ClassName, RaceId, RaceName, Gender, Level, Experience, RealmPoints,
-                     ZoneName, Activity, IsOnline, IsAlive, LastUpdateUtc, MoneyCopper, InventoryRevision,
-                     ZoneId, X, Y, Z, RegionId, Health, Mana, Endurance, BindRegionId, BindX, BindY, BindZ,
-                     CurrentGoal, ObjectiveProgress, LastMeaningfulProgressUtc, IsRetired, SerializedAbilities)
-                VALUES
-                    (@name, @realm, @classId, @className, @raceId, @raceName, @gender, @level, @xp, @rp,
-                     @zoneName, 'Queued at randomized starting location', 0, 1, @now, @money, 0,
-                     @zoneId, @x, @y, @z, @region, 1, 0, 0, @region, @x, @y, @z,
-                     'Awaiting staggered login queue', @placement, @now, 0, @abilities)
-                """;
-            insert.Parameters.AddWithValue("@name", identity.Name);
-            insert.Parameters.AddWithValue("@level", newLevel);
-            insert.Parameters.AddWithValue("@xp", OfflineDaoc.Configuration.AutonomousPopulationShape.ExperienceForLevel(newLevel));
-            insert.Parameters.AddWithValue("@rp", newLevel == 50 ? OfflineDaoc.Configuration.AutonomousPopulationShape.RealmPointsForNewLevelFifty() : 0L);
-            insert.Parameters.AddWithValue("@money", newLevel == 50 ? 100000000L : newLevel >= 10 ? 1000L * newLevel * newLevel : 0L);
-            insert.Parameters.AddWithValue("@abilities", $"generated-level|{newLevel}");
-            insert.Parameters.AddWithValue("@realm", identity.Realm);
-            insert.Parameters.AddWithValue("@classId", identity.ClassId);
-            insert.Parameters.AddWithValue("@className", identity.ClassName);
-            insert.Parameters.AddWithValue("@raceId", identity.RaceId);
-            insert.Parameters.AddWithValue("@raceName", identity.RaceName);
-            insert.Parameters.AddWithValue("@gender", identity.Gender);
-            insert.Parameters.AddWithValue("@now", now);
-            insert.Parameters.AddWithValue("@region", start.RegionId);
-            insert.Parameters.AddWithValue("@x", start.X);
-            insert.Parameters.AddWithValue("@y", start.Y);
-            insert.Parameters.AddWithValue("@z", start.Z);
-            insert.Parameters.AddWithValue("@zoneId", start.ZoneId);
-            insert.Parameters.AddWithValue("@zoneName", newLevel >= 20 ? start.ZoneName : start.RegionId is 51 or 151 or 181
-                ? "Shrouded Isles starting area"
-                : "Classic starting area");
-            insert.Parameters.AddWithValue("@placement",
-                $"Launcher assigned a realm/race/class-valid random start in region {start.RegionId} before server startup");
-            insert.ExecuteNonQuery();
-            if (newLevel == 50)
-            {
-                long botId = connection.LastInsertRowId;
-                EquipGeneratedBot(connection, transaction, botId, identity, now);
-            }
-        }
-
-        UpdatePopulationTarget(connection, transaction);
+        IReadOnlyList<BotCharacterGenerator.Identity> identities =
+            BotRosterWriter.Add(connection, transaction, realm, levels, BotRosterWriter.ReservedNames(connection, transaction));
+        BotRosterWriter.UpdatePopulationTarget(connection, transaction);
         transaction.Commit();
         return identities;
-    }
-
-    private static void EquipGeneratedBot(SQLiteConnection connection, SQLiteTransaction transaction,
-        long botId, BotCharacterGenerator.Identity identity, string now)
-    {
-        using var gear = connection.CreateCommand();
-        gear.Transaction = transaction;
-        gear.CommandText = """
-            INSERT INTO Inventory (Inventory_ID,OwnerID,ITemplate_Id,SlotPosition,Count,Condition,Durability,LastTimeRowUpdated)
-            SELECT lower(hex(randomblob(16))),@owner,l.TemplateId,l.SlotPosition,1,t.MaxCondition,t.MaxDurability,@now
-            FROM offline_level50_loadouts l JOIN ItemTemplate t ON t.Id_nb=l.TemplateId WHERE l.ClassId=@class
-            """;
-        gear.Parameters.AddWithValue("@owner", $"offlinebot:{botId}");
-        gear.Parameters.AddWithValue("@now", now);
-        gear.Parameters.AddWithValue("@class", identity.ClassId);
-        if (gear.ExecuteNonQuery() < 15)
-            throw new InvalidOperationException($"The level-50 class template for {identity.ClassName} is missing or incomplete. No bots were added.");
-    }
-
-    private sealed record BotStartingLocation(int RegionId, int X, int Y, int Z, int ZoneId = 0, string ZoneName = "");
-
-    // Match the server's established capital recovery anchors. Its normal
-    // login validation grounds these positions on the current navmesh.
-    private static BotStartingLocation CapitalBotStartingLocation(int realm) => realm switch
-    {
-        1 => new(10, 35990, 30298, 8000, 26, "City of Camelot"),
-        2 => new(101, 32020, 28294, 8819, 120, "Jordheim"),
-        3 => new(201, 33197, 31200, 8000, 209, "Tir na Nog"),
-        _ => throw new ArgumentOutOfRangeException(nameof(realm)),
-    };
-
-    private static BotStartingLocation ChooseBotStartingLocation(
-        SQLiteConnection connection,
-        SQLiteTransaction transaction,
-        int realm,
-        int raceId,
-        int classId)
-    {
-        using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = """
-            SELECT Region, XPos, YPos, ZPos
-            FROM StartupLocation
-            WHERE MinVersion <= 168
-              AND (RealmID=0 OR RealmID=@realm)
-              AND (RaceID=0 OR RaceID=@race)
-              AND (ClassID=0 OR ClassID=@class)
-              AND (XPos<>0 OR YPos<>0 OR ZPos<>0)
-              AND ((@realm=1 AND Region IN (1,51))
-                OR (@realm=2 AND Region IN (100,151))
-                OR (@realm=3 AND Region IN (200,181)))
-            GROUP BY Region, XPos, YPos, ZPos
-            """;
-        command.Parameters.AddWithValue("@realm", realm);
-        command.Parameters.AddWithValue("@race", raceId);
-        command.Parameters.AddWithValue("@class", classId);
-
-        var starts = new List<BotStartingLocation>();
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
-        {
-            starts.Add(new BotStartingLocation(
-                reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3)));
-        }
-
-        if (starts.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"No authoritative Classic/Shrouded Isles starting location exists for realm {realm}, race {raceId}, class {classId}. No capital fallback was used.");
-        }
-
-        return starts[Random.Shared.Next(starts.Count)];
     }
 
     private async Task DeleteSelectedBotAsync()
@@ -3289,7 +3163,7 @@ internal sealed partial class MainForm : Form
             PurgeBotData(connection, transaction, botId);
         }
 
-        UpdatePopulationTarget(connection, transaction);
+        BotRosterWriter.UpdatePopulationTarget(connection, transaction);
         transaction.Commit();
         return serverRunning;
     }
@@ -3344,7 +3218,7 @@ internal sealed partial class MainForm : Form
             }
         }
 
-        UpdatePopulationTarget(connection, transaction);
+        BotRosterWriter.UpdatePopulationTarget(connection, transaction);
         transaction.Commit();
         return serverRunning;
     }
@@ -3485,34 +3359,6 @@ internal sealed partial class MainForm : Form
         }
     }
 
-    private static void UpdatePopulationTarget(SQLiteConnection connection, SQLiteTransaction transaction)
-    {
-        int count;
-        using (var countCommand = connection.CreateCommand())
-        {
-            countCommand.Transaction = transaction;
-            countCommand.CommandText = "SELECT COUNT(*) FROM offline_world_bots WHERE IsRetired=0";
-            count = Convert.ToInt32(countCommand.ExecuteScalar());
-        }
-        int target = count;
-        using (var settings = connection.CreateCommand())
-        {
-            settings.Transaction = transaction;
-            settings.CommandText = "UPDATE offline_population_settings SET Value=CASE Key WHEN 'PopulationEnabled' THEN @enabled WHEN 'ActiveTarget' THEN @target WHEN 'HardActiveCap' THEN '0' ELSE Value END WHERE Key IN ('PopulationEnabled','ActiveTarget','HardActiveCap')";
-            settings.Parameters.AddWithValue("@enabled", count > 0 ? "true" : "false");
-            settings.Parameters.AddWithValue("@target", target.ToString());
-            settings.ExecuteNonQuery();
-        }
-        using (var serverProperties = connection.CreateCommand())
-        {
-            serverProperties.Transaction = transaction;
-            serverProperties.CommandText = "UPDATE ServerProperty SET Value=CASE Key WHEN 'population_enabled' THEN @enabled WHEN 'active_target' THEN @target WHEN 'hard_active_cap' THEN '0' ELSE Value END WHERE Key IN ('population_enabled','active_target','hard_active_cap')";
-            serverProperties.Parameters.AddWithValue("@enabled", count > 0 ? "true" : "false");
-            serverProperties.Parameters.AddWithValue("@target", target.ToString());
-            serverProperties.ExecuteNonQuery();
-        }
-    }
-
     private BotRow? SelectedBot() => _grid.CurrentRow?.DataBoundItem as BotRow;
 
     private void UpdateDeleteButton()
@@ -3555,7 +3401,7 @@ internal sealed partial class MainForm : Form
     {
         try
         {
-            CamlannServerConfig.EnsurePvP(Path.Combine(_serverDirectory, "config", "serverconfig.xml"));
+            CamlannServerConfig.EnsureWorld(Path.Combine(_serverDirectory, "config", "serverconfig.xml"), Path.GetFileName(_database));
         }
         catch (Exception ex)
         {
@@ -3574,7 +3420,8 @@ internal sealed partial class MainForm : Form
             return false;
         }
 
-        if (string.Equals(worldModel, CamlannWorldReset.WorldModelValue, StringComparison.Ordinal))
+        // Either world's marker (Realm-1 or Camlann-1, docs/RVR_WORLDS.md) is ready to start.
+        if (WorldSaveLayout.FromMarker(worldModel) is not null)
             return true;
         if (!File.Exists(_database))
         {
@@ -3609,7 +3456,7 @@ internal sealed partial class MainForm : Form
                 _database,
                 Path.Combine(Path.GetDirectoryName(_database)!, "camlann-world-reset-backups"),
                 credentials.Account,
-                Path.Combine(_serverDirectory, "realm-event-records.sqlite3"),
+                _worldFiles.EventRecords,
                 BotGoalsServerStopped));
             MessageBox.Show(this,
                 $"World reset complete.\n\nCharacters: {result.Characters}\nBots: {result.Bots}\nGuilds: {result.Guilds}\nKeeps returned to neutral: {result.Keeps}\nRelics homed: {result.Relics}\nEvent records cleared: {result.EventRecords}\n\nBackup: {result.Backup}",

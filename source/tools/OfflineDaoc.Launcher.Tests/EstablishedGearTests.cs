@@ -46,8 +46,8 @@ public sealed class EstablishedGearTests
         Type identityType = launcher.GetType("OfflineDaoc.Configuration.BotCharacterGenerator+Identity")!;
         object identity = Activator.CreateInstance(identityType,
             ["Testbot", 1, 1, 1, "Paladin", 1, "Briton"])!;
-        Type main = launcher.GetType("OfflineDaoc.Launcher.MainForm")!;
-        main.GetMethod("EquipGeneratedBot", BindingFlags.NonPublic | BindingFlags.Static)!
+        Type roster = launcher.GetType("OfflineDaoc.Launcher.BotRosterWriter")!;
+        roster.GetMethod("EquipGeneratedBot", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, [db, transaction, 7L, identity, DateTime.UtcNow.ToString("O")]);
         transaction.Commit();
         using var check = db.CreateCommand();

@@ -211,7 +211,11 @@ public static class AutonomousCrewManager
                     return IsManagedMembership(record.GuildId, IsCrewGuild(guild),
                         guild != null && protectedGuildIds.Contains(guild.GuildID));
                 }).ToArray();
-                int desiredCount = DesiredManagedGuildCount(managedRoster.Length);
+                // Camlann: one mixed pool, as before. RvR: one pool per realm, single-realm guilds.
+                WorldModelKind world = WorldMode.Current;
+                AutonomousGuildSeeding.GuildPool[] pools = AutonomousGuildSeeding.PlanPools(world,
+                    managedRoster.Select(record => (eRealm)record.Realm));
+                int desiredCount = pools.Sum(pool => pool.GuildCount);
 
                 var persistedMappings = DOLDB<AutonomousCrewMappingRecord>.SelectAllObjects()
                     .ToDictionary(mapping => mapping.SourceGuildId, StringComparer.Ordinal);
@@ -220,36 +224,51 @@ public static class AutonomousCrewManager
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .ToHashSet(StringComparer.Ordinal);
                 List<Guild> managedGuilds = generated.Where(guild => !protectedGuildIds.Contains(guild.GuildID)).ToList();
-                List<Guild> survivors = managedGuilds.Where(guild => requiredSurvivors.Contains(guild.GuildID)).ToList();
-                foreach (Guild guild in managedGuilds)
-                    if (survivors.Count < desiredCount && !survivors.Contains(guild))
-                        survivors.Add(guild);
-
-                for (int ordinal = 0; survivors.Count < desiredCount; ordinal++)
+                var poolPlan = new List<(AutonomousGuildSeeding.GuildPool Pool, List<Guild> Guilds)>();
+                foreach (AutonomousGuildSeeding.GuildPool pool in pools)
                 {
-                    // A temporary legacy marker makes an interrupted create
-                    // discoverable even before its charter row is persisted.
-                    AutonomousGuildCharter kind = AutonomousBotIdentity.CharterForOrdinal(
-                        ordinal, AutonomousBotGoalPolicy.Settings.Mix);
-                    string name = CrewNamePrefix + NameForOrdinal(ordinal, kind);
-                    Guild existing = GuildMgr.GetGuildByName(name);
-                    if (existing != null)
-                    {
-                        if (IsCrewGuild(existing) && !protectedGuildIds.Contains(existing.GuildID) && !survivors.Contains(existing))
-                            survivors.Add(existing);
-                        continue;
-                    }
-                    Guild created = GuildMgr.CreateGuild(eRealm.None, name);
-                    if (created == null)
-                        throw new InvalidOperationException($"Could not create generated guild '{name}'.");
-                    EnsureCharter(created, ordinal, charters);
-                    survivors.Add(created);
-                }
-                survivors = survivors.Take(desiredCount).ToList();
-                if (desiredCount > 0 && survivors.Count != desiredCount)
-                    throw new InvalidOperationException($"Expected {desiredCount} managed guilds but only {survivors.Count} are available.");
+                    List<Guild> poolGuilds = managedGuilds
+                        .Where(guild => AutonomousGuildSeeding.GuildServesPool(world, guild.Realm, pool))
+                        .Where(guild => poolPlan.All(entry => !entry.Guilds.Contains(guild)))
+                        .ToList();
+                    List<Guild> poolSurvivors = poolGuilds.Where(guild => requiredSurvivors.Contains(guild.GuildID)).ToList();
+                    foreach (Guild guild in poolGuilds)
+                        if (poolSurvivors.Count < pool.GuildCount && !poolSurvivors.Contains(guild))
+                            poolSurvivors.Add(guild);
 
-                GuildTarget[] targets = BuildTargets(survivors.Select(guild => guild.GuildID).ToArray(), managedRoster.Length);
+                    for (int ordinal = pool.FirstOrdinal; poolSurvivors.Count < pool.GuildCount; ordinal++)
+                    {
+                        // A temporary legacy marker makes an interrupted create
+                        // discoverable even before its charter row is persisted.
+                        AutonomousGuildCharter kind = AutonomousBotIdentity.CharterForOrdinal(
+                            ordinal, AutonomousBotGoalPolicy.Settings.Mix);
+                        string name = CrewNamePrefix + NameForOrdinal(ordinal, kind);
+                        Guild existing = GuildMgr.GetGuildByName(name);
+                        if (existing != null)
+                        {
+                            if (IsCrewGuild(existing) && !protectedGuildIds.Contains(existing.GuildID) && !poolSurvivors.Contains(existing) &&
+                                AutonomousGuildSeeding.GuildServesPool(world, existing.Realm, pool) &&
+                                poolPlan.All(entry => !entry.Guilds.Contains(existing)))
+                                poolSurvivors.Add(existing);
+                            continue;
+                        }
+                        Guild created = GuildMgr.CreateGuild(AutonomousGuildSeeding.GuildRealm(world, pool), name);
+                        if (created == null)
+                            throw new InvalidOperationException($"Could not create generated guild '{name}'.");
+                        EnsureCharter(created, ordinal, charters);
+                        poolSurvivors.Add(created);
+                    }
+                    poolSurvivors = poolSurvivors.Take(pool.GuildCount).ToList();
+                    if (pool.GuildCount > 0 && poolSurvivors.Count != pool.GuildCount)
+                        throw new InvalidOperationException($"Expected {pool.GuildCount} managed guilds but only {poolSurvivors.Count} are available.");
+                    poolPlan.Add((pool, poolSurvivors));
+                }
+                List<Guild> survivors = poolPlan.SelectMany(entry => entry.Guilds).ToList();
+
+                var targetPlan = poolPlan
+                    .Select(entry => (entry.Pool, BuildTargets(entry.Guilds.Select(guild => guild.GuildID).ToArray(), entry.Pool.BotCount)))
+                    .ToArray();
+                GuildTarget[] targets = targetPlan.SelectMany(entry => entry.Item2).ToArray();
                 HashSet<string> survivorIds = survivors.Select(guild => guild.GuildID).ToHashSet(StringComparer.Ordinal);
                 AssignmentCandidate[] fixedMembers = managedRoster
                     .Where(record => survivorIds.Contains(record.GuildId))
@@ -257,16 +276,24 @@ public static class AutonomousCrewManager
                 OfflineWorldBotRecord[] candidates = managedRoster
                     .Where(record => !survivorIds.Contains(record.GuildId))
                     .ToArray();
-                Dictionary<long, string> assignments = PlanAssignments(fixedMembers, candidates.Select(ToCandidate), targets);
+                Dictionary<long, string> assignments = AutonomousGuildSeeding.PlanAssignments(world, targetPlan,
+                    fixedMembers, candidates.Select(ToCandidate));
 
                 foreach (IGrouping<string, OfflineWorldBotRecord> source in candidates
                              .Where(record => !string.IsNullOrWhiteSpace(record.GuildId))
                              .GroupBy(record => record.GuildId, StringComparer.Ordinal))
                 {
                     string targetId = source.Select(record => assignments[record.BotId]).First();
-                    if (source.Any(record => assignments[record.BotId] != targetId))
+                    // A whole source guild moves to one survivor so its keep and alliance references follow it.
+                    // In the RvR world a source guild that spans realms keeps the per-realm assignments instead.
+                    bool singlePool = !AutonomousGuildSeeding.SingleRealmGuilds(world) ||
+                                      source.Select(record => record.Realm).Distinct().Count() == 1;
+                    if (singlePool && source.Any(record => assignments[record.BotId] != targetId))
                     {
-                        targetId = SelectTargetForWholeGuild(source.Select(ToCandidate), fixedMembers, targets);
+                        GuildTarget[] sourceTargets = AutonomousGuildSeeding.SingleRealmGuilds(world)
+                            ? targetPlan.Where(entry => entry.Pool.Realm == (eRealm)source.First().Realm).SelectMany(entry => entry.Item2).ToArray()
+                            : targets;
+                        targetId = SelectTargetForWholeGuild(source.Select(ToCandidate), fixedMembers, sourceTargets);
                         foreach (OfflineWorldBotRecord record in source)
                             assignments[record.BotId] = targetId;
                     }
@@ -289,7 +316,7 @@ public static class AutonomousCrewManager
                             throw new InvalidOperationException($"Could not persist generated guild mapping {sourceGuild.Name} -> {targetGuild.Name}.");
                         persistedMappings[source.Key] = mapping;
                     }
-                    else if (!string.Equals(mapping.TargetGuildId, targetId, StringComparison.Ordinal))
+                    else if (singlePool && !string.Equals(mapping.TargetGuildId, targetId, StringComparison.Ordinal))
                     {
                         targetId = mapping.TargetGuildId;
                         targetGuild = GuildMgr.GetGuildByGuildID(targetId) ??
@@ -357,9 +384,10 @@ public static class AutonomousCrewManager
                              MappingNeedsCompletion(mapping.State, GuildMgr.GetGuildByGuildID(mapping.SourceGuildId) != null)))
                     CompleteMapping(mapping, protectedGuildIds);
 
-                for (int ordinal = 0; ordinal < survivors.Count; ordinal++)
+                // Ordinals run per pool from its first ordinal (Camlann: 0, 1, 2, ... as before).
+                foreach ((Guild guild, int ordinal) in poolPlan.SelectMany(entry =>
+                             entry.Guilds.Select((guild, index) => (guild, entry.Pool.FirstOrdinal + index))))
                 {
-                    Guild guild = survivors[ordinal];
                     AutonomousGuildCharterRecord charter = EnsureCharter(guild, ordinal, charters);
                     if (charter.Ordinal != ordinal)
                     {
@@ -387,10 +415,11 @@ public static class AutonomousCrewManager
 
                 int remainingManaged = GuildMgr.GetGuilds().Count(guild => IsCrewGuild(guild) &&
                     !humanGuildIds.Contains(guild.GuildID));
-                if (remainingManaged != desiredCount || remainingManaged > MaximumManagedGuilds)
-                    throw new InvalidOperationException($"Generated guild consolidation left {remainingManaged} managed guilds; expected {desiredCount} with an absolute cap of {MaximumManagedGuilds}.");
+                int managedCap = AutonomousGuildSeeding.MaximumManagedGuilds(world, pools);
+                if (remainingManaged != desiredCount || remainingManaged > managedCap)
+                    throw new InvalidOperationException($"Generated guild consolidation left {remainingManaged} managed guilds; expected {desiredCount} with an absolute cap of {managedCap}.");
 
-                Log.Info($"Autonomous guild reconciliation completed: bots={managedRoster.Length}, changed={changed.Count}, " +
+                Log.Info($"Autonomous guild reconciliation completed: world={world}, pools={pools.Length}, bots={managedRoster.Length}, changed={changed.Count}, " +
                          $"managedGuilds={remainingManaged}, protectedGeneratedGuilds={protectedGuildIds.Count}.");
                 return new(true, changed.Count, remainingManaged, string.Empty);
             }

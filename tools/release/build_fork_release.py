@@ -26,7 +26,8 @@ SERVER_ASSEMBLIES = ['GameServer', 'CoreBase', 'CoreDatabase', 'CoreServer']
 LAUNCHER_FILES = ['OfflineDAoC.dll', 'OfflineDAoC.exe', 'OfflineDAoC.pdb', 'OfflineDAoC.deps.json',
                   'OfflineDAoC.runtimeconfig.json', 'Join Friend.cmd']
 PROTECTED = {'runtime/account.txt', 'runtime/server/config/serverconfig.xml',
-             'runtime/server/bot-goals.json', 'runtime/server/rvr-world.json'}
+             'runtime/server/bot-goals.json', 'runtime/server/rvr-world.json',
+             'runtime/server/rvr-world-camlann.json'}
 
 
 def sha(path):

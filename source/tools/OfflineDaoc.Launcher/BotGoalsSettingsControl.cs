@@ -58,6 +58,32 @@ internal sealed class BotGoalsSettingsControl : UserControl
     private string? _pendingMixRequestId;
     private DateTime _pendingMixRequestSinceUtc;
     private string _lastAppliedRequestId = string.Empty;
+    /// <summary>
+    /// True when the current save is an RvR world (marker Realm-1). Gothwaite PvP belongs to the PvP world only (owner
+    /// decision 18): the switch is disabled and a save that turns it on is refused. MainForm reads the current save's
+    /// marker; R5b passes the picked world. Evaluated at most every few seconds.
+    /// </summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Func<bool>? IsRvrWorld { get; set; }
+    private bool _rvrWorld;
+    private DateTime _rvrWorldCheckedUtc = DateTime.MinValue;
+    private bool RvrWorld
+    {
+        get
+        {
+            if (IsRvrWorld is null) return false;
+            DateTime now = DateTime.UtcNow;
+            if (now - _rvrWorldCheckedUtc > TimeSpan.FromSeconds(5))
+            {
+                try { _rvrWorld = IsRvrWorld(); }
+                catch (Exception) { _rvrWorld = false; }
+                _rvrWorldCheckedUtc = now;
+            }
+            return _rvrWorld;
+        }
+    }
+
     public bool HasUnsavedChanges => _legacyMapping || _loadFailed || _worldModeLoadFailed || ReadValues() != _saved || WorldModeSelected != _worldModeSaved;
     private bool WorldModeSelected => _worldMode.SelectedIndex == GothwaiteWorldModeIndex;
 
@@ -67,11 +93,16 @@ internal sealed class BotGoalsSettingsControl : UserControl
 
     public BotGoalsSettingsControl(string path, string worldSpeedStatusPath, string mixRequestPath,
         Func<bool> serverStopped, Func<int> rosterCount, Func<string>? createWorldModeBackup)
+        : this(path, worldSpeedStatusPath, mixRequestPath, serverStopped, rosterCount, createWorldModeBackup, null) { }
+
+    public BotGoalsSettingsControl(string path, string worldSpeedStatusPath, string mixRequestPath,
+        Func<bool> serverStopped, Func<int> rosterCount, Func<string>? createWorldModeBackup, string? worldModePath)
     {
         _path = path;
         _worldSpeedStatusPath = worldSpeedStatusPath;
         _mixRequestPath = mixRequestPath;
-        _worldModePath = Path.Combine(Path.GetDirectoryName(path)!, GothwaitePvpSettings.FileName);
+        // The Gothwaite switch is per save (gothwaite-pvp-camlann.json beside the Camlann save, docs/RVR_WORLDS.md).
+        _worldModePath = worldModePath ?? Path.Combine(Path.GetDirectoryName(path)!, GothwaitePvpSettings.FileName);
         _serverStopped = serverStopped;
         _rosterCount = rosterCount;
         _createWorldModeBackup = createWorldModeBackup;
@@ -303,6 +334,8 @@ internal sealed class BotGoalsSettingsControl : UserControl
             BotGoalSettings values = ReadValues();
             values.Validate();
             bool worldModeOn = WorldModeSelected;
+            if (worldModeOn && RvrWorld)
+                throw new InvalidOperationException("Gothwaite PvP belongs to the PvP world (Camlann); the Realm vs Realm world never runs it.");
             bool writeWorldMode = worldModeOn || File.Exists(_worldModePath);
             string? backup = null;
             if (worldModeOn && !_worldModeSaved)
@@ -433,7 +466,11 @@ internal sealed class BotGoalsSettingsControl : UserControl
         _total.ForeColor = valid ? Color.LightGreen : Color.Salmon;
         foreach (Control control in _sliders.Cast<Control>().Concat(_values))
             control.Enabled = !mixOperationPending && (stopped || liveStatus != null);
-        _preset.Enabled = _danger.Enabled = _worldShape.Enabled = _worldMode.Enabled = stopped && !mixOperationPending;
+        _preset.Enabled = _danger.Enabled = _worldShape.Enabled = stopped && !mixOperationPending;
+        // An RvR save never offers Gothwaite: a stale switch shows Normal, and Save writes it off.
+        if (RvrWorld && WorldModeSelected)
+            SetWorldMode(false);
+        _worldMode.Enabled = stopped && !mixOperationPending && !RvrWorld;
         _worldModeHint.Visible = _openBgHint.Visible = WorldModeSelected;
         _altHours.Enabled = _altCap.Enabled = stopped && !mixOperationPending;
         _save.Enabled = stopped && valid && !mixOperationPending;

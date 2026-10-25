@@ -23,6 +23,15 @@ public static class ServerPropertyRows
         using var connection = new SQLiteConnection($"Data Source={database};Version=3;Pooling=False;Default Timeout=10");
         connection.Open();
         using var transaction = connection.BeginTransaction();
+        Upsert(connection, transaction, category, rows);
+        if (serverStopped != null && !serverStopped())
+            throw new InvalidOperationException("The server started before the settings could be saved. Stop it and try again.");
+        transaction.Commit();
+    }
+
+    /// <summary>The same upsert inside the caller's transaction (the world reset writes its rows this way).</summary>
+    public static void Upsert(SQLiteConnection connection, SQLiteTransaction transaction, string category, IReadOnlyList<ServerPropertyRow> rows)
+    {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         // ServerProperty_ID has a unique index; the server leaves it NULL, so new
@@ -48,9 +57,6 @@ public static class ServerPropertyRows
             command.Parameters.AddWithValue("@updated", updated);
             command.ExecuteNonQuery();
         }
-        if (serverStopped != null && !serverStopped())
-            throw new InvalidOperationException("The server started before the settings could be saved. Stop it and try again.");
-        transaction.Commit();
     }
 
     /// <summary>The saved values of these keys (read-only). A missing database or table gives no rows.</summary>

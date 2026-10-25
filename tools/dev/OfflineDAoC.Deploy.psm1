@@ -19,9 +19,13 @@ $script:ProtectedRelativePaths = @(
     'runtime\data\opendaoc.sqlite3.db',
     'runtime\data\opendaoc.sqlite3.db-wal',
     'runtime\data\opendaoc.sqlite3.db-shm',
+    'runtime\data\opendaoc-camlann.sqlite3.db',
+    'runtime\data\opendaoc-camlann.sqlite3.db-wal',
+    'runtime\data\opendaoc-camlann.sqlite3.db-shm',
     'runtime\server\config\serverconfig.xml',
     'runtime\server\bot-goals.json',
-    'runtime\server\rvr-world.json'
+    'runtime\server\rvr-world.json',
+    'runtime\server\rvr-world-camlann.json'
 )
 $script:InstallTargetDirs = @('runtime\server', 'runtime\server\lib')
 

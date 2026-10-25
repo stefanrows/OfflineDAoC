@@ -219,6 +219,20 @@ public sealed class GothwaitePvpSettingsTests
         Assert.That(backups, Is.EqualTo(1), "only the switch from Normal into the mode backs up");
     }
 
+    [Test] public void TheRvrWorldRefusesGothwaiteAndShowsNormal()
+    {
+        Field<ComboBox>("_worldMode").SelectedIndex = 1;
+        _panel.GetType().GetProperty("IsRvrWorld")!.SetValue(_panel, (Func<bool>)(() => true));
+
+        Call("SaveSettings");
+        Assert.That(File.Exists(SettingsPath), Is.False, "nothing is written for a Realm-1 save");
+        Assert.That(Field<string>("_notice"), Does.Contain("Realm vs Realm"));
+
+        Call("UpdateState");
+        Assert.That(Field<ComboBox>("_worldMode").SelectedIndex, Is.Zero);
+        Assert.That(Field<ComboBox>("_worldMode").Enabled, Is.False, "the switch is locked in the RvR world (owner decision 18)");
+    }
+
     [Test] public void SaveDatabaseBackupCopiesTheStoppedDatabase()
     {
         Directory.CreateDirectory(_folder);

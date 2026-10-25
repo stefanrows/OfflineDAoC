@@ -43,8 +43,18 @@ defaults in code, keep/relic start state from the reset.
 - [~] **R3a Keeps.** Agent rvr-r3a (2026-10-25 09:55). Neutral Warden start, capture by realm sticks, claims by
   the keep's realm (solo guild ok), guards by owner realm. 1 session.
 - [ ] **R3b Relics.** Realm pads, realm-wide bonus, relic sieges. 1 session.
-- [~] **R5a World reset + files.** Implemented (worktree rvr-r5a; launcher 293 tests, both worlds built offline), in review (09:45). Fresh RvR and fresh Camlann world routines,
-  per-world DB and side files, properties (today's rates). 1 session.
+- [x] **R5a World reset + files.** (0.335.0; `docs/RVR_WORLDS.md`) One
+  reset routine creates a fresh RvR or Camlann world: seed copy, progress
+  cleared in one transaction (characters, inventories, bots, companions,
+  guilds, other accounts, exchange, sponsor tokens, hookpoint items; local
+  account kept and set to PrivLevel 1), integrity check, then the old save
+  and all side files MOVE to `playable-backups/<timestamp>-<world>-world-reset/`.
+  Marker `Realm-1`/`Camlann-1`, today's rates, 600 bots per realm (RvR:
+  single-realm guilds, 45; Camlann: 15 mixed), RvR keeps neutral except 45
+  portal + 6 relic keeps, relics home. Files: RvR `opendaoc.sqlite3.db`,
+  Camlann `opendaoc-camlann.sqlite3.db` + `-camlann` side files;
+  `CamlannServerConfig.EnsureWorld` writes the connection string. Gothwaite
+  switch locked for a Realm-1 save. Launcher tests 297, server fixtures 19.
 - [ ] **R5b Launcher world picker.** Owner 2026-10-25 10:05: a **dropdown**
   "World: RvR (default) / PvP (Camlann)", switchable only while the server is
   stopped, choice remembered; START SERVER starts the selected world (the
@@ -110,3 +120,11 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   Camlann unchanged. Mixed bot crews and groups fight themselves until R4a.
 - 2026-10-25 09:50: R1b reviewed (ACCEPT, 3 lows fixed) and merged as 0.334.0.
   R5a in review, R2 running.
+- 2026-10-25 00:40 (system clock): R5a implemented in worktree rvr-r5a (not
+  merged): one reset routine for both worlds, per-world save and side files,
+  45 single-realm bot guilds in RvR; docs/RVR_WORLDS.md; server 4638 passed /
+  7 bug-160, launcher 297 passed / 0 failed. Review fixes: local account to
+  privilege level 1, rollback names the backup folder, orphan sweep, camp
+  sponsors and hook-point items cleared, Gothwaite refused in RvR saves.
+- 2026-10-25 10:25: R5a reviewed (PrivLevel reset and 4 lows fixed) and merged
+  as 0.335.0. R5b (world dropdown) starts now; R2 and R3a in review/progress.

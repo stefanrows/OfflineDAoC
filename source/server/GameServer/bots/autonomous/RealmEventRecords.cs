@@ -16,7 +16,8 @@ public static class RealmEventRecords
     private static Timer _writer;
     private static bool _reconcile;
     private static DateTime _nextWarningUtc;
-    private static string PathName=>Path.Combine(AppContext.BaseDirectory,"realm-event-records.sqlite3");
+    // Per save: realm-event-records-camlann.sqlite3 beside the Camlann save (docs/RVR_WORLDS.md).
+    private static string PathName=>WorldSaveFiles.ServerFile(OfflineDaoc.Configuration.WorldSaveLayout.RealmEventRecordsFileName);
     public static void Begin(string eventId,string name,string kind,string realm,string details)
     {
         lock(Sync)
