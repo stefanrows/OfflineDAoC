@@ -524,8 +524,13 @@ namespace DOL.GS
         private static bool ValidSiegeSpell(BotSiegeKind kind, eSpellType type) => (kind, type) is
             (BotSiegeKind.Ram, eSpellType.SummonSiegeRam) or (BotSiegeKind.Catapult, eSpellType.SummonSiegeCatapult) or
             (BotSiegeKind.Trebuchet, eSpellType.SummonSiegeTrebuchet) or (BotSiegeKind.Ballista, eSpellType.SummonSiegeBallista);
-        public static GameSiegeWeapon CreateSiegeWeapon(BotSiegeKind kind) => kind switch
+        public static GameSiegeWeapon CreateSiegeWeapon(BotSiegeKind kind) => CreateSiegeWeapon(WorldMode.Current, kind);
+
+        /// <summary>Camlann (fork): a light ram. RvR world (upstream 0.38c, port session S2): the heavy ram (reach 500,
+        /// 12 places); the bots standing at it count as its crew (<see cref="GameSiegeRam"/>.Crew).</summary>
+        public static GameSiegeWeapon CreateSiegeWeapon(WorldModelKind world, BotSiegeKind kind) => kind switch
         {
+            BotSiegeKind.Ram when world == WorldModelKind.Realm => new GameSiegeRam { Level = 3, Model = 2602, Name = "heavy siege ram" },
             BotSiegeKind.Ram => new GameSiegeRam { Level = 1, Model = 2600, Name = "light siege ram" },
             BotSiegeKind.Catapult => new GameSiegeCatapult { Level = 3 },
             BotSiegeKind.Trebuchet => new GameSiegeTrebuchet { Level = 3 },

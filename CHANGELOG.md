@@ -12,6 +12,38 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.343.0] - 2026-10-25
+
+### Added
+- RvR mode, port session S2 (`docs/RVR_PORT_MAP.md`): in the `Realm-1` world
+  armies march as upstream 0.38c does. The force moves as one column behind a
+  march leader who waits for stragglers, halts when a quarter of the column
+  fights at the rear, detours around enemy keeps (6,000 units, 12,000 around
+  the defenders' rally keep) and pushes through for 2 min after 4 min stuck;
+  at the camp edge the leader waits up to 12 min for 60 % of the column, then
+  the arrival opens the battle. Two heavy rams (range 500) hit the outer and
+  then the inner gate with the bots standing at them as crew, plus a trebuchet
+  and a catapult, placed on site. Healers stay behind the line and resurrect
+  fallen realm mates; a dead bot waits up to 4 min for a rez and otherwise
+  releases at the muster. Solo followers are merged into eight-man groups.
+  Ported verbatim: ArmyPush, ArmyDetour, SiegePlacement, KeepTravelStallPolicy,
+  SiegeResurrection, SiegeParties; Rally/March, siege job, RvR planner and
+  FrontierThreat as Realm partials. 65 new unit tests.
+
+### Changed
+- In the Realm-1 world the siege-job pool is per realm instead of per guild,
+  a captured keep stands at level 4 and a claimed one at level 5 as upstream,
+  the 10x test ram is gone, and the fork's livelier-RvR waves (doctrine,
+  observe, pause, stealth loop, speed, opportunity, LFG, hub muster, danger
+  memory, route variants, mob bends) are off for world bots; battleground
+  participants keep the fork behaviour. Camlann unchanged.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.342.0] - 2026-10-25
 
 ### Added

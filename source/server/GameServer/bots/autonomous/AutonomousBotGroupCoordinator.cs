@@ -222,6 +222,9 @@ public static partial class AutonomousBotGroupCoordinator
                 using var maintenance = BotThinkProfiler.Measure(BotThinkPhase.CoordinatorMaintenance);
                 RemoveBrokenSessions();
                 ExpireStalledTargetChoices(now);
+                // RvR world (upstream 0.38c, port session S2): solo siege recruits merge into full parties.
+                if (WorldMode.IsRvr)
+                    FormSiegeParties();
                 TryFormGroups();
             }
         }
@@ -1464,6 +1467,10 @@ public static partial class AutonomousBotGroupCoordinator
                           !AutonomousBattlegroundParticipation.IsOpenCrew(bot) &&
                           (objectiveKind != eAutonomousObjectiveKind.RvR ||
                            !AutonomousActivityScheduler.IsPveBlocked(bot.PersistentRecord, WorldSimulationClock.UtcNow)) &&
+                          // RvR world (upstream 0.38c, port session S2): siege recruits are merged into full parties by
+                          // FormSiegeParties, not random warbands.
+                          !(objectiveKind == eAutonomousObjectiveKind.RvR && WorldMode.IsRvr &&
+                            AutonomousRvrEventLayer.IsForceCommitted($"rvr-{bot.DatabaseID}", GameLoop.GameLoopTime)) &&
                           AutonomousObjectiveAssignments.Is(bot, objectiveKind))
             .OrderByDescending(bot => objectiveKind == eAutonomousObjectiveKind.RvR ? RecruitmentTarget(bot, objectiveKind) : 0)
             .ThenByDescending(bot => objectiveKind == eAutonomousObjectiveKind.RvR &&
@@ -1487,7 +1494,19 @@ public static partial class AutonomousBotGroupCoordinator
         int rvrRouteChecks = 0;
         var rejectedPickupCamps = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (GameBot seed in available)
+        // RvR world (upstream 0.38c, port session S2): RvR stages at the realm's border keep, so the leader is the bot
+        // closest to it, realms taking turns (AutonomousRvrStaging.ClosestToStagingFirst). Camlann keeps the order above.
+        IEnumerable<GameBot> seeds = available;
+        if (objectiveKind == eAutonomousObjectiveKind.RvR && WorldMode.IsRvr)
+        {
+            var crossings = new Dictionary<(eRealm Realm, ushort Region), DbZonePoint>();
+            seeds = AutonomousRvrStaging.ClosestToStagingFirst(available, bot => bot.Realm, bot =>
+                AutonomousRvrStaging.TryGetNearestBorderKeep(bot, out AutonomousRvrStaging.BorderKeep keep, crossings)
+                    ? AutonomousWorldBotController.EstimateTravelMinutes(bot, keep.RegionId,
+                        (int)keep.Position.X, (int)keep.Position.Y, crossings)
+                    : double.MaxValue);
+        }
+        foreach (GameBot seed in seeds)
         {
             GameBot leader = seed;
             PickupDestination pickupDestination = null;
@@ -2127,7 +2146,7 @@ public static partial class AutonomousBotGroupCoordinator
 
         if ((session.Phase == "Meeting up" || session.SoftMeetupStarted) &&
             !(session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
-              AutonomousRvrEventLayer.IsBattleForce(session.Id, GameLoop.GameLoopTime)))
+              IsSiegeEventSession(session.Id, GameLoop.GameLoopTime)))
         {
             if (IsRvrHubMuster(session))
                 TrackHubMusterTravellers(session, members);
@@ -2150,8 +2169,10 @@ public static partial class AutonomousBotGroupCoordinator
 
         // An active siege replaces the normal wipe rendezvous: each revived
         // member returns directly to the event while its warband stays locked.
+        // RvR world (upstream 0.38c): its muster and march too (run 8: the Dun Dagda army waited 90 minutes in group
+        // rendezvous).
         if (session.ObjectiveKind == eAutonomousObjectiveKind.RvR &&
-            AutonomousRvrEventLayer.IsBattleForce(session.Id, GameLoop.GameLoopTime))
+            IsSiegeEventSession(session.Id, GameLoop.GameLoopTime))
         {
             session.RecoveringBetweenPulls = false;
             session.Phase = "Siege in progress";
@@ -2521,8 +2542,17 @@ public static partial class AutonomousBotGroupCoordinator
 
     // ---- RvR portal-keep muster (AutonomousRvrHubMuster) -------------------
 
+    /// <summary>The session's force belongs to a siege event: RvR world (upstream) muster, march and battle; Camlann the
+    /// battle only.</summary>
+    private static bool IsSiegeEventSession(string sessionId, long now) => WorldMode.IsRvr
+        ? AutonomousRvrEventLayer.IsEventForce(sessionId, now)
+        : AutonomousRvrEventLayer.IsBattleForce(sessionId, now);
+
     /// <summary>An RvR group whose meetup lies inside a border hub's safe circle.</summary>
+    /// <remarks>RvR world (port session S2): the fork's hub muster is one of the livelier-RvR waves; the original warband
+    /// meets at its rendezvous and leaves when everyone is there (AutonomousRvrWaves).</remarks>
     private static bool IsRvrHubMuster(Session session) =>
+        AutonomousRvrWaves.Active &&
         session != null && session.ObjectiveKind == eAutonomousObjectiveKind.RvR && session.RaidMusterEvent == null &&
         AutonomousRvrStaging.TryGetHubAt(session.RendezvousRegion, session.Rendezvous, out _, out _);
 

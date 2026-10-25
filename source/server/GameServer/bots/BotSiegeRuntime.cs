@@ -115,6 +115,14 @@ namespace DOL.GS
             if (weapon is GameSiegeRam)
                 return target is GameKeepDoor { State: eDoorState.Closed } && range <= weapon.attackComponent.AttackRange;
             if (range < weapon.MinAttackRange || range > weapon.MaxAttackRange) return false;
+            // RvR world (upstream 0.38c, port session S2): catapults and trebuchets lob onto a ground target in an arc, as
+            // players used them: no line of sight. A ballista fires directly: it needs a clear shot, or a target standing up
+            // on a wall. Camlann keeps the line-of-sight rule for every engine.
+            if (WorldMode.IsRvr)
+            {
+                if (weapon is GameSiegeCatapult) return true;
+                return target.Z - weapon.Z > 150 || Visible(weapon, target);
+            }
             return Visible(weapon, target);
         }
 

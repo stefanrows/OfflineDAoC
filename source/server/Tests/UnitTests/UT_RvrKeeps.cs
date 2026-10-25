@@ -222,12 +222,13 @@ public sealed class UT_RvrKeeps
             Assert.That(captured, Is.True);
             Assert.That(saved.Keep.Realm, Is.EqualTo(eRealm.Midgard));
             Assert.That(saved.Keep.Guild, Is.Null, "the Wardens are released");
-            Assert.That(saved.Keep.Level, Is.EqualTo(1), "a realm keep without a claim stands at level 1");
+            // Port session S2: upstream's capture level (starting_keep_level 4), not the fork's level 1.
+            Assert.That(saved.Keep.Level, Is.EqualTo(PvpKeepCampaign.RvrCaptureLevel), "a realm keep without a claim stands at level 4");
             Assert.That(saved.Keep.Doors["gate"].Realm, Is.EqualTo(eRealm.Midgard), "the gate is Midgard's");
             Assert.That(row.Realm, Is.EqualTo((byte)eRealm.Midgard), "the realm is in the save");
             Assert.That(row.ClaimedGuildName, Is.Empty);
             Assert.That(row.LordDefeated, Is.True, "the keep waits at the steward for a Midgard guild");
-            Assert.That(row.Level, Is.EqualTo(1));
+            Assert.That(row.Level, Is.EqualTo(PvpKeepCampaign.RvrCaptureLevel));
             Assert.That(PvpKeepCampaign.NeedsGarrison(WorldModelKind.Realm, row.LordDefeated, (eRealm)row.Realm), Is.False,
                 "a restart never hands the capture back to the Wardens");
         });
@@ -250,7 +251,8 @@ public sealed class UT_RvrKeeps
             Assert.That(albionGuild.ClaimedKeeps, Does.Not.Contain(saved.Keep), "the previous claim is removed");
             Assert.That(row.ClaimedGuildName, Is.Empty);
             Assert.That(row.Realm, Is.EqualTo((byte)eRealm.Hibernia));
-            Assert.That(row.Level, Is.EqualTo(1), "level 1 until a Hibernian guild claims it");
+            // Port session S2: upstream's capture level 4 until a Hibernian guild claims it (then 5).
+            Assert.That(row.Level, Is.EqualTo(PvpKeepCampaign.RvrCaptureLevel), "level 4 until a Hibernian guild claims it");
             Assert.That(row.LordDefeated, Is.True);
         });
     }

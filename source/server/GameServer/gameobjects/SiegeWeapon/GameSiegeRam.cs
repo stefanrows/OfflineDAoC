@@ -325,7 +325,7 @@ namespace DOL.GS
 			get
 			{
 				//custom formula
-				return 10000 + ((Level + 1) * 2000) - (int)(10000 * ((double)RiderCount / (double)MAX_PASSENGERS));
+				return 10000 + ((Level + 1) * 2000) - (int)(10000 * ((double)(WorldMode.IsRvr ? Crew : RiderCount) / (double)MAX_PASSENGERS));
 			}
 		}
 
@@ -334,9 +334,34 @@ namespace DOL.GS
 			get { lock (_companionRiders) return CurrentRiders.Length + _companionRiders.Count; }
 		}
 
+		/// <summary>
+		/// RvR world (upstream 0.38c, port session S2): riders, plus - for a bot-operated ram - the gamebots standing at
+		/// the ram (bots cannot mount; owner 2026-10-07: players crewed rams and bot crews must break doors in a sensible
+		/// time): the operator's group members, or any autonomous world bot of its side at an autonomous operator's ram.
+		/// Up to the ram's places. Fork: seated companions and world-bot riders count once; allies by the realm rule.
+		/// </summary>
+		public int Crew
+		{
+			get
+			{
+				GameBot[] seated = CompanionRiders;
+				int crew = CurrentRiders.Length + seated.Length;
+				if (Owner is GameBot op && (op.Group != null || op.IsAutonomousWorldBot))
+					foreach (GameNPC npc in GetNPCsInRadius(300))
+						if (npc is GameBot member && member != op && member.IsAlive && System.Array.IndexOf(seated, member) < 0 &&
+							ServerRules.PvpCombatant.AreAllied(op, member) &&
+							(op.Group?.IsInTheGroup(member) == true || op.IsAutonomousWorldBot && member.IsAutonomousWorldBot))
+							crew++;
+				return System.Math.Min(MAX_PASSENGERS, crew);
+			}
+		}
+
 		public override int CalcDamageToTarget(GameLiving target)
 		{
 			//return BaseDamage + (int)(((double)BaseDamage / 2.0) * (double)((double)CurrentRiders.Length / (double)MAX_PASSENGERS));
+			// RvR world (upstream 0.38c): the original damage, raised by the crew; no test multiplier.
+			if (WorldMode.IsRvr)
+				return BaseDamage + (BaseDamage / 2 * Crew);
 			// TEMPORARY TESTING: Remove this 10x multiplier after Siege Ram testing.
 			return (BaseDamage + (BaseDamage / 2 * RiderCount)) * 10;
 		}

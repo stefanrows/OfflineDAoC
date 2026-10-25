@@ -198,6 +198,9 @@ namespace DOL.AI.Brain
         {
             if (!CompanionEngagementMode.Allows(Body, living)) return;
             if (GothwaitePvpSelfDefence.Drops(BotBody, living)) return;
+            // RvR world (upstream 0.38c, port session S2): a target this bot dropped as unreachable or stalemated does not
+            // pull it back in (empty in Camlann).
+            if (_autonomousWorldController?.IgnoresTarget(living) == true) return;
             if (aggroAmount > 0)
             {
                 foreach (ProtectECSGameEffect protect in living.effectListComponent.GetAbilityEffects().Where(e => e.EffectType is eEffect.Protect))
@@ -5719,6 +5722,9 @@ namespace DOL.AI.Brain
 
             if (TryResurrectGroupMember())
                 return true;
+            // RvR world (upstream 0.38c, port session S2): a siege army's healers raise its fallen, not only their own party's.
+            if (WorldMode.IsRvr && TryResurrectSiegeComrade())
+                return true;
 
             if (!Body.CanCastHealSpells) return false;
 
@@ -6248,6 +6254,70 @@ namespace DOL.AI.Brain
             return TryResurrectGroupMember();
         }
 
+        private long _nextSiegeRaiseScanTick;
+
+        /// <summary>
+        /// A siege attacker's healer raises fallen realm-mates near it, not only its own party (AutonomousSiegeResurrection).
+        /// Out of combat only, as players raised between waves; one corpse per healer at a time.
+        /// RvR world only (upstream 0.38c, port session S2); Camlann keeps the party's own raises.
+        /// </summary>
+        private bool TryResurrectSiegeComrade()
+        {
+            Spell resurrection = BotBody.ResurrectionSpell;
+            long now = GameLoop.GameLoopTime;
+            // In the battle too, as players raised from the back line: only while nothing has hit the healer for a few
+            // seconds and no enemy stands by the corpse. Out of combat only, no siege corpse was ever raised (run 22: 48
+            // Midgard dead at Dun Dagda, none raised, each waiting for a raise before walking back from its muster).
+            bool fighting = Body.InCombat;
+            if (resurrection == null || now < _nextSiegeRaiseScanTick || Body.IsCasting)
+                return false;
+            _nextSiegeRaiseScanTick = now + 3_000;
+            // An RvR healer of the realm that is not in the siege army itself (a roaming group at the battle) raises the
+            // army's dead too, as any realm-mate would (run 27: 20-100 such checks per 5 minutes with dead beside them).
+            if (!AutonomousSiegeResurrection.IsSiegeAttacker(BotBody) &&
+                !(AutonomousObjectiveAssignments.Is(BotBody, eAutonomousObjectiveKind.RvR) && AutonomousSiegeResurrection.HasFallenComradeNear(BotBody)))
+            {
+                _nextSiegeRaiseScanTick = now + 15_000;
+                return false;
+            }
+            if (fighting && now - Body.LastAttackedByEnemyTick < AutonomousSiegeResurrection.QuietMilliseconds)
+            {
+                AutonomousSiegeResurrection.Note(AutonomousSiegeResurrection.Check.UnderAttack);
+                return false;
+            }
+            if (!AutonomousSiegeResurrection.CanRaise(BotBody) || !CheckHealSpell(resurrection))
+            {
+                AutonomousSiegeResurrection.Note(AutonomousSiegeResurrection.Check.CannotCast);
+                return false;
+            }
+            GameBot corpse = AutonomousSiegeResurrection.ClaimCorpse(BotBody, fighting, out bool enemyBlocked);
+            AutonomousSiegeResurrection.Note(corpse != null ? AutonomousSiegeResurrection.Check.Corpse :
+                enemyBlocked ? AutonomousSiegeResurrection.Check.EnemyByCorpse : AutonomousSiegeResurrection.Check.NoCorpse);
+            if (corpse == null)
+                return false;
+            int range = BotBody.castingComponent.CalculateSpellRange(resurrection);
+            if (!BotBody.IsWithinRadius(corpse, range) || !BotGroupSupport.HasCorpseLineOfSight(BotBody, corpse))
+            {
+                Vector3 current = new(BotBody.X, BotBody.Y, BotBody.Z);
+                Vector3 desired = new(corpse.X, corpse.Y, corpse.Z);
+                AutonomousThreatAwarePathing.SafeStep step = AutonomousThreatAwarePathing.ChooseStep(BotBody, current, desired, 900);
+                BotBody.PathTo(step.Position, BotBody.MaxSpeed);
+                return true;
+            }
+            GameObject previous = BotBody.TargetObject;
+            BotBody.attackComponent.StopAttack();
+            BotBody.StopFollowing();
+            BotBody.StopMoving();
+            BotBody.TargetObject = corpse;
+            if (BotBody.CastSpell(resurrection, m_mobSpellLine, false))
+            {
+                log.Info($"AUTONOMOUS_SIEGE_RESURRECTION healer=\"{BotBody.Name}\" corpse=\"{corpse.Name}\" realm={BotBody.Realm} " +
+                         $"region={BotBody.CurrentRegionID} at={BotBody.X},{BotBody.Y},{BotBody.Z}");
+                return true;
+            }
+            BotBody.TargetObject = previous;
+            return false;
+        }
         private bool TryResurrectGroupMember()
         {
             // The strongest currently affordable rank (bug 55): in combat, cast

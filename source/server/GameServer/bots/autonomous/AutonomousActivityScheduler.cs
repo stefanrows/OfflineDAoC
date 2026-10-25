@@ -41,7 +41,7 @@ public static class AutonomousActivityScheduler
             rvr = Math.Min(.95, rvr * AutonomousPlayerBehavior.HunterPatrolFactor(danger));
         if (level >= 50)
             rvr = Math.Max(rvr, MaxLevelRvrShare(type, record.Aggression, record.RiskTolerance));
-        if (blocked || !mayRvr) rvr = 0;
+        if (blocked || !mayRvr || !MayTakeRvr(WorldMode.Current, level)) rvr = 0;
         roll = Math.Clamp(roll, 0, .999999);
         if (roll < rvr) return eAutonomousObjectiveKind.RvR;
         double group = type switch
@@ -59,6 +59,13 @@ public static class AutonomousActivityScheduler
         double remainingRoll = (roll - rvr) / Math.Max(.001, 1 - rvr);
         return remainingRoll < group ? eAutonomousObjectiveKind.GroupPve : eAutonomousObjectiveKind.SoloPve;
     }
+
+    /// <summary>RvR world (upstream 0.38c BotGoalSettings, port session S2): "Levels 1-19 cannot have RvR goals"; from 20
+    /// a bot may roam the frontiers, and only level-50 armies open or join sieges (the event layer's level gate).
+    /// Camlann keeps the fork's player types (hunters from 10, roamers from 15).</summary>
+    public const int RvrWorldMinimumLevel = 20;
+
+    public static bool MayTakeRvr(WorldModelKind world, int level) => world != WorldModelKind.Realm || level >= RvrWorldMinimumLevel;
 
     /// <summary>
     /// Level 50 is the end game: with no raids to run, a bot's tasks lean on RvR. This is the

@@ -140,6 +140,25 @@ defaults in code, keep/relic start state from the reset.
   players add "+ Lv.50" ones). Server 4,994 passed / 7 bug-160, launcher 328
   passed. Open for S2: the march column behind a march leader, siege floor,
   siege resurrection, siege parties, livelier-RvR wave guards, friend/foe sites.
+  S2 (march and siege floor; branch rvr-port-s2, implemented in source,
+  real-client check pending; details in [RVR_PORT_MAP.md](RVR_PORT_MAP.md)
+  section 7): the RvR world's RvR turn, siege rally, frontier threat scan and
+  planner are upstream's verbatim behind one world branch each: the army
+  marches as one column behind its march leader (regroup holds, push after 4
+  minutes stalled, detour around enemy keeps, the leader waits up to 12
+  minutes at the camp edge); siege crews set up synthetic engines on the spot
+  (two rams at the outer gate then the keep door, trebuchet, catapult; heavy
+  ram crewed by the bots at it, no 10x test multiplier; artillery arcs);
+  healers raise the army's fallen from behind the line, the dead wait 240 s
+  and release at the muster; solo recruits merge into parties; keep travel
+  re-plans when stalled; the frontier commit and roam anchors of the
+  original planner; capture level 4, claim level 5; no RvR task below level
+  20; the livelier-RvR waves (doctrine, observe, pause, stealth loop, speed,
+  opportunity hunts, LFG, hub muster, danger memory, route variants, mob
+  bends) are off for Realm-1 world bots, battleground crews keep the fork's.
+  Friend and foe of the ported code go through PvpCombatant and the keep rule.
+  Server 5,059 passed / 7 bug-160 (65 new). Open for S3: realm raids,
+  ForcedRaid, RP rewards, battlegrounds, relic pad, teleporters.
 - [ ] **R6 Verification + docs.** Both-worlds suite, load test, log review,
   client checklist, CAMLANN.md contract, PLAY.md, task 147. 1 session.
 
@@ -261,3 +280,5 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-25 15:55: R4b merged as 0.341.0 after one fix round (no re-check, owner: build first, review once in R6). R4c rescoped to an upstream port. Server on the owner PC still runs 0.340.0 RvR.
 - 2026-10-25 16:15: owner: RvR must be the original code, not a rebuild ("warum wurde das ganze neu gebaut"). R4a/R4b count as misdirected work; R4c becomes the upstream port of the whole RvR bot layer for Realm-1. Analysis agent started; no code change yet. Lesson recorded.
 - 2026-10-25 18:05: Port S1 merged as 0.342.0 (upstream 0.38c event layer + defense + muster + realm-owned keep start in Realm-1; fresh RvR world seeds level-50 bots; Camlann untouched). S2 (march column, ArmyPush/Detour, siege placement/resurrection, friend/foe sites) started. Deploy + RvR world reset on the owner PC after S2.
+- 2026-10-25 18:50: owner: R6 tonight right after S3, no waiting; fresh RvR world with pure level-50 bots confirmed. Plan: S2 merge -> deploy + RvR world reset + server start (~19:45); S3 merge -> update; R6 = one daoc-reviewer over the whole port + 10x live run + docs (CAMLANN.md contract, PLAY.md, task 147) tonight.
+- 2026-10-25 19:35: Port S2 merged as 0.343.0 (march column, ArmyPush/Detour, siege placement with rams, siege resurrection, siege parties, realm siege-job pool, livelier-RvR waves off in Realm-1). Deploy + fresh level-50 RvR world on the owner PC now. S3 running in parallel.

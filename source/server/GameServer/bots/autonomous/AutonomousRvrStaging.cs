@@ -75,6 +75,43 @@ public static class AutonomousRvrStaging
         return keep.RegionId != 0;
     }
 
+    // RvR world (upstream 0.38c, port session S2): the nearer border keep and the leader order of RvR warbands.
+
+    /// <summary>The bot's nearer border keep by estimated travel time (upstream; S2 solo staging).</summary>
+    public static bool TryGetNearestBorderKeep(GameBot bot, out BorderKeep keep,
+        Dictionary<(eRealm Realm, ushort Region), DOL.Database.DbZonePoint> crossings = null)
+    {
+        crossings ??= new();
+        keep = BorderKeeps(bot.Realm).OrderBy(k => AutonomousWorldBotController.EstimateTravelMinutes(bot, k.RegionId,
+            (int)k.Position.X, (int)k.Position.Y, crossings)).FirstOrDefault();
+        return keep.RegionId != 0;
+    }
+
+    /// <summary>
+    /// RvR leader candidates, closest to their realm's border keep first. A
+    /// randomly drawn leader was often a roamer deep in an enemy frontier and
+    /// missed the 20-minute staging window (244 of 2,099 warbands in one run).
+    /// Realms take turns so one realm's nearby bots never crowd out another's
+    /// formation; equal estimates keep the incoming (shuffled) order.
+    /// </summary>
+    public static List<T> ClosestToStagingFirst<T>(IEnumerable<T> candidates, Func<T, eRealm> realm,
+        Func<T, double> minutesToStaging)
+    {
+        List<T>[] queues = candidates
+            .Select((candidate, index) => (candidate, index, minutes: minutesToStaging(candidate)))
+            .GroupBy(entry => realm(entry.candidate))
+            .OrderBy(group => group.Key)
+            .Select(group => group.OrderBy(entry => entry.minutes).ThenBy(entry => entry.index)
+                .Select(entry => entry.candidate).ToList())
+            .ToArray();
+        var ordered = new List<T>();
+        for (int rank = 0; queues.Any(queue => rank < queue.Count); rank++)
+            foreach (List<T> queue in queues)
+                if (rank < queue.Count)
+                    ordered.Add(queue[rank]);
+        return ordered;
+    }
+
     /// <summary>Radius of a border hub's safe circle (the imported area rows).</summary>
     public const int HubRadius = 3_500;
 

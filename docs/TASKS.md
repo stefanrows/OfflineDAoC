@@ -6,6 +6,14 @@ When a task is done and its required verification is complete, move it out of it
 
 ## Open
 
+148. **Move the WSL checkout and worktrees off /mnt/c to the WSL ext4 disk.** Owner,
+     2026-10-25 ("würde sowas schneller gehen"): builds and the 5,000-test suite
+     run 2-5x slower on the Windows drive through WSL; the agents' wall time is
+     mostly model time, so this is the only local lever. Keep the install under
+     C:\OfflineDAoC\playable (Windows needs it), move only the git checkout
+     (`/mnt/c/OfflineDAoC` -> `~/OfflineDAoC`), adjust `playable-dev/server.sh`
+     and the memory paths. After R6, not during the port.
+
 147. **RvR mode: classic realm-vs-realm as the default world, Camlann PvP as a
      launcher button.** Owner (Aaron), 2026-10-24: get as close as the fork
      allows to the upstream 0.37b RvR we compared against, with all fork

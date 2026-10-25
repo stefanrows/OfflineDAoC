@@ -7,8 +7,9 @@ namespace DOL.GS;
 
 // RvR world (Realm-1): the staged-assault muster of the upstream layer (shadowofze/OfflineDAoC 0.38c,
 // AutonomousWorldBotController.Rally.cs HandleSiegeMuster / TryGetDefenseMuster), copied verbatim for port session S1
-// (docs/RVR_PORT_MAP.md). HandleSiegeRally calls it in the RvR world while the rally order is a home muster; the march
-// column behind a march leader (TryMarchWithArmy) follows in session S2.
+// (docs/RVR_PORT_MAP.md). HandleSiegeRallyRealm calls it while the rally order is a home muster; the march column behind
+// a march leader (TryMarchWithArmy) followed in session S2 (RealmRally.cs). Fork: friend and foe through the realm rule
+// (map section 4b).
 public sealed partial class AutonomousWorldBotController
 {
     private string _musterKey;
@@ -22,7 +23,8 @@ public sealed partial class AutonomousWorldBotController
     private bool HandleSiegeMuster(GameBot bot, string forceId, AutonomousRvrEventLayer.RallyOrder order)
     {
         AutonomousRvrStaging.BorderKeep home;
-        if (bot.Realm == order.Attacker ? !AutonomousRvrStaging.TryGetSiegeMuster(bot.Realm, _rvrDestination.RegionId, out home)
+        if (DOL.GS.ServerRules.PvpCombatant.AllianceRealm(bot) == order.Attacker
+                ? !AutonomousRvrStaging.TryGetSiegeMuster(bot.Realm, _rvrDestination.RegionId, out home)
                 : !TryGetDefenseMuster(bot, order.TargetId, out home)) return false;
         var members = bot.Group?.GetMembersInTheGroup().OfType<GameBot>().OrderBy(member => member.DatabaseID).ToArray() ?? [bot];
         int memberIndex = Array.IndexOf(members, bot);
@@ -79,7 +81,7 @@ public sealed partial class AutonomousWorldBotController
         var keeps = GameServer.KeepManager.GetKeepsOfRegion(_rvrDestination.RegionId);
         var target = keeps.FirstOrDefault(keep => $"rvr-keep-{keep.KeepID}" == targetId);
         if (target == null) return false;
-        var friendly = keeps.Where(keep => keep != target && keep.Realm == bot.Realm &&
+        var friendly = keeps.Where(keep => keep != target && !AutonomousRvrKeepPolicy.IsHostileTo(keep, bot.Realm) &&
                 Vector2.DistanceSquared(new(keep.X, keep.Y), new(target.X, target.Y)) >= 3_000f * 3_000f)
             .OrderBy(keep => Vector2.DistanceSquared(new(keep.X, keep.Y), new(target.X, target.Y))).FirstOrDefault();
         if (friendly != null)

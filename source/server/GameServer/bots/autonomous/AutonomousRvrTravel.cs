@@ -138,6 +138,32 @@ public static class AutonomousRvrTravel
     }
 
     /// <summary>
+    /// RvR world (upstream 0.38c, port session S2, docs/RVR_PORT_MAP.md): the original direct leg. One connected via-point
+    /// 2,400 ahead with a small per-bot side offset (-600..600), proved on the navmesh, else the goal itself. The Camlann
+    /// world keeps the fork's route variants (<see cref="ChooseRoute"/>). Copied verbatim.
+    /// </summary>
+    public static Vector3 ChooseWaypoint(GameBot bot, Vector3 destination)
+    {
+        Vector3 start = new(bot.X, bot.Y, bot.Z);
+        Vector2 delta = new(destination.X - start.X, destination.Y - start.Y);
+        float distance = delta.Length();
+        Zone zone = bot.CurrentZone;
+        var nav = PathfindingProvider.Instance;
+        if (distance < 3500 || zone == null || !nav.IsAvailable || !nav.HasNavmesh(zone)) return destination;
+        Vector2 direction = delta / distance;
+        float side = ((bot.DatabaseID % 7) - 3) * 200;
+        Vector3 raw = start + new Vector3(direction.X * 2400 - direction.Y * side,
+            direction.Y * 2400 + direction.X * side, 0);
+        if (bot.CurrentRegion.GetZone((int)raw.X, (int)raw.Y) != zone ||
+            !AutonomousNavigationSurface.TryFloor(nav, zone, raw, out Vector3 floor) ||
+            Math.Abs(floor.Z - raw.Z) > 256 ||
+            !AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, start, floor) ||
+            (bot.CurrentRegion.GetZone((int)destination.X, (int)destination.Y) == zone &&
+             !AutonomousZoneItinerary.HasCompleteCorridor(nav, zone, floor, destination))) return destination;
+        return floor;
+    }
+
+    /// <summary>
     /// The next waypoint of a roaming leg for <paramref name="variant"/> (see
     /// <see cref="AutonomousRvrRoutePolicy.ChooseRoute"/>), checked against the
     /// bot's own zone and navmesh. Without navigation or on a short leg the

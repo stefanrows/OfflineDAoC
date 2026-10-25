@@ -15,7 +15,9 @@ namespace DOL.GS
 
         private bool HoldDefensiveKeepPost(GameBot bot, AbstractGameKeep keep)
         {
-            if (bot.Guild == null || keep.Guild != bot.Guild || bot.CurrentRegionID != keep.Region) return false;
+            // Camlann: the guild's own keep. RvR world (upstream 0.38c, port session S2): any keep of the bot's realm.
+            if ((WorldMode.IsRvr ? AutonomousRvrKeepPolicy.IsHostileTo(keep, bot.Realm) : bot.Guild == null || keep.Guild != bot.Guild) ||
+                bot.CurrentRegionID != keep.Region) return false;
             long now = GameLoop.GameLoopTime;
             Vector3 current = new(bot.X, bot.Y, bot.Z);
             string target = $"rvr-keep-{keep.KeepID}";
