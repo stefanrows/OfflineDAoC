@@ -69,7 +69,7 @@ defaults in code, keep/relic start state from the reset.
   Camlann `opendaoc-camlann.sqlite3.db` + `-camlann` side files;
   `CamlannServerConfig.EnsureWorld` writes the connection string. Gothwaite
   switch locked for a Realm-1 save. Launcher tests 297, server fixtures 19.
-- [~] **R5b Launcher world picker.** Agent rvr-r5b (2026-10-25 10:30). Owner 2026-10-25 10:05: a **dropdown**
+- [~] **R5b Launcher world picker.** Implemented (worktree rvr-r5b: dropdown, CREATE/RESET WORLD, per-world window, legacy Camlann save renamed to the -camlann file on first open; launcher 318 tests), fast-forward + review next (11:35). Owner 2026-10-25 10:05: a **dropdown**
   "World: RvR (default) / PvP (Camlann)", switchable only while the server is
   stopped, choice remembered; START SERVER starts the selected world (the
   launcher writes that world's save path into the server config); each world
