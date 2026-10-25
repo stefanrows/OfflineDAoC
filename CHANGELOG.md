@@ -12,6 +12,35 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.345.0] - 2026-10-25
+
+### Added
+- Launcher: STOP EVENT… button on the realm events panel ends a forced realm
+  raid at once ("Stopped by player", no cooldown, reserved bots released), as
+  upstream; forced raids show "(no time limit)".
+
+### Changed
+- Realm-1 world: keeps start and reset at level 4 as upstream (release of a
+  keep, reset after capture, capture realm points counted from level 4,
+  `/keep fastcreate`); Camlann keeps the `starting_keep_level` property (1).
+  The Camlann march restraint (no aggro and dropped pursuits while a keep plan
+  is far away) and the guild keep defense are off in the Realm-1 world; the
+  column fights on the way as upstream. CREATE WORLD text for the RvR world
+  now says the frontier keeps start owned by their original realm at their
+  original level.
+
+### Fixed
+- RvR sieges never reached their deadlines: the ported upstream expire clock
+  started at `long.MinValue`, so the live tick difference overflowed and the
+  muster deadline, the 5-min extension, event expiry, repel, the defense
+  muster deadline and the 4-h timer never fired (upstream 0.38c has the same
+  latent defect). Sieges now march after 12 (+5) min and are repelled after
+  10 min without attackers. 19 tests on the live clock (UT_RvrR6Fixes).
+- Two doc comments orphaned by S3 insertions re-attached.
+
+### Removed
+- None.
+
 ## [0.344.0] - 2026-10-25
 
 ### Added
