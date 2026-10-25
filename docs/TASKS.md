@@ -56,8 +56,7 @@ When a task is done and its required verification is complete, move it out of it
      implemented in source, real-client check pending.
      Upstream port S3 (relic pad 8 enemies, route threat awareness on, realm
      raids per realm with upstream rally timing, no bracket battleground tours
-     as upstream's 0% default, town teleporters ported but waiting for the S2
-     call sites, road fallback; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S3 done")
+     as upstream's 0% default, town teleporters, road fallback; [RVR_PORT_MAP.md](RVR_PORT_MAP.md) "S3 done")
      implemented in source, real-client check pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and

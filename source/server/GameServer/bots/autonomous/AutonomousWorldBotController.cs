@@ -841,6 +841,7 @@ namespace DOL.GS
                 return true;
             }
 
+            if (TryTownTeleportAcross(bot, crossing, camp.RegionId, camp.X, camp.Y, camp.Z)) return true;
             if (TryRepairAuditedCrossingSource(bot, crossing))
                 return true;
 
@@ -1152,6 +1153,7 @@ namespace DOL.GS
                 return false;
             }
 
+            if (TryTownTeleportAcross(bot, crossing, trainer.CurrentRegionID, trainer.X, trainer.Y, trainer.Z)) return true;
             if (TryRepairAuditedCrossingSource(bot, crossing))
                 return true;
 
@@ -1480,6 +1482,7 @@ namespace DOL.GS
                 return true;
             }
 
+            if (TryTownTeleportAcross(bot, crossing, targetRegion, targetX, targetY, bot.Z)) return true;
             if (TryRepairAuditedCrossingSource(bot, crossing))
                 return true;
 
@@ -4536,6 +4539,11 @@ namespace DOL.GS
 
         private bool TryBeginFasterStableRoute(GameBot bot, Vector3 waypoint, string destinationName)
         {
+            // Town teleporters first (upstream 0.38c, RvR world only): taken only when clearly faster than walking and
+            // any horse for the same goal (assembled parties, raid parties and warbands go together via their leader).
+            if (TryTownTeleport(bot, bot.CurrentRegionID, waypoint,
+                    Vector3.Distance(new(bot.X, bot.Y, bot.Z), waypoint) / Math.Max(150, (int)bot.MaxSpeed)))
+                return true;
             var expedition = AutonomousRealmRaid.GetTravelView(bot);
             bool independentExpeditionTravel = expedition != null && (expedition.Muster ||
                 _groupDirective?.Leader == null || !_groupDirective.Leader.IsAlive ||
