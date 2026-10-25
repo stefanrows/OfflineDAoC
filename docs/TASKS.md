@@ -33,6 +33,11 @@ When a task is done and its required verification is complete, move it out of it
      bonus, relic-temple guards by realm, bot relic raids by realm;
      [RVR_RELICS.md](RVR_RELICS.md)) implemented in source, real-client check
      pending.
+     R4a (bot guilds with realm names and an even charter mix per realm, no
+     cross-realm recruitment, realm login balancer with
+     `rvr_realm_active_target` 600 per realm, grudges per realm; see
+     [RVR_BOTS.md](RVR_BOTS.md)) implemented in source, real-client check
+     pending.
 
 114. **Silence the remaining startup noise: Atlas realm ability and
      NoVariance spell scaling.** Log sweep 2026-10-10 (installed

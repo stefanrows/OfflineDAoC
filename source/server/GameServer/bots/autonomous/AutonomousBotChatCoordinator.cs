@@ -349,9 +349,17 @@ public static class AutonomousBotChatCoordinator
     {
         if (victim?.Guild == null || string.IsNullOrWhiteSpace(targetName))
             return;
-        BroadcastGuild(victim.Guild, victim.Name,
-            $"KOS {targetName}, last seen in {Clean(location, "the frontier")}. Watch for the crew.");
+        BroadcastGuild(victim.Guild, victim.Name, GuildKosLine(WorldMode.Current, targetName, Clean(location, "the frontier")));
     }
+
+    /// <summary>
+    /// The guild-chat KOS call after a grudge kill. Camlann names the enemy crew; in the RvR world the grudge
+    /// belongs to the whole realm and the enemy is simply another realm, so the line carries no crew.
+    /// </summary>
+    public static string GuildKosLine(WorldModelKind world, string targetName, string location) =>
+        world == WorldModelKind.Realm
+            ? $"KOS {targetName}, last seen in {location}. Pass it on; watch your backs out there."
+            : $"KOS {targetName}, last seen in {location}. Watch for the crew.";
 
     public static void OnAutonomousBotPvpKill(GameObject killer, GamePlayer victim)
     {

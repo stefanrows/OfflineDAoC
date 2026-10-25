@@ -16,6 +16,12 @@ namespace DOL.GS;
 public static class AutonomousCrewManager
 {
     public const string CrewNamePrefix = "Camlann Crew ";
+    /// <summary>
+    /// The RvR world's temporary marker of a guild being created ("Realm Crew 17"): it makes an interrupted
+    /// create discoverable before its charter row exists, and the same reconcile renames the guild to its realm
+    /// name (<see cref="AutonomousRealmGuildNames"/>) before any bot logs in.
+    /// </summary>
+    public const string RealmCrewNamePrefix = "Realm Crew ";
     public const int MaximumCrewSize = 8; // Ordinary party/warband capacity; guilds may be larger.
     public const int MaximumManagedGuilds = 15;
     public const int BotsPerSizeTriplet = 56;
@@ -55,8 +61,15 @@ public static class AutonomousCrewManager
 
     public static bool IsCrewGuild(Guild guild) =>
         guild != null && guild != Guild.DummyGuild &&
-        (ManagedGuildIds.ContainsKey(guild.GuildID) ||
-         guild.Name?.StartsWith(CrewNamePrefix, StringComparison.Ordinal) == true);
+        (ManagedGuildIds.ContainsKey(guild.GuildID) || IsCrewMarkerName(WorldMode.Current, guild.Name));
+
+    /// <summary>
+    /// Whether a guild name carries a generated-guild marker: "Camlann Crew " in both worlds (legacy and
+    /// interrupted Camlann creates), "Realm Crew " only in the RvR world.
+    /// </summary>
+    public static bool IsCrewMarkerName(WorldModelKind world, string name) =>
+        name?.StartsWith(CrewNamePrefix, StringComparison.Ordinal) == true ||
+        world == WorldModelKind.Realm && name?.StartsWith(RealmCrewNamePrefix, StringComparison.Ordinal) == true;
 
     public static bool IsManagedMembership(string guildId, bool isGeneratedGuild, bool containsHuman) =>
         string.IsNullOrWhiteSpace(guildId) || isGeneratedGuild && !containsHuman;
@@ -240,9 +253,13 @@ public static class AutonomousCrewManager
                     {
                         // A temporary legacy marker makes an interrupted create
                         // discoverable even before its charter row is persisted.
-                        AutonomousGuildCharter kind = AutonomousBotIdentity.CharterForOrdinal(
-                            ordinal, AutonomousBotGoalPolicy.Settings.Mix);
-                        string name = CrewNamePrefix + NameForOrdinal(ordinal, kind);
+                        // Camlann: the historical draw from the global ordinal. RvR: the per-realm charter plan,
+                        // and a temporary "Realm Crew <ordinal>" marker until the rename below.
+                        AutonomousGuildCharter kind = AutonomousGuildSeeding.CharterFor(world, pool, ordinal,
+                            AutonomousBotGoalPolicy.Settings.Mix);
+                        string name = AutonomousGuildSeeding.SingleRealmGuilds(world)
+                            ? RealmCrewNamePrefix + ordinal
+                            : CrewNamePrefix + NameForOrdinal(ordinal, kind);
                         Guild existing = GuildMgr.GetGuildByName(name);
                         if (existing != null)
                         {
@@ -255,7 +272,7 @@ public static class AutonomousCrewManager
                         Guild created = GuildMgr.CreateGuild(AutonomousGuildSeeding.GuildRealm(world, pool), name);
                         if (created == null)
                             throw new InvalidOperationException($"Could not create generated guild '{name}'.");
-                        EnsureCharter(created, ordinal, charters);
+                        EnsureCharter(created, ordinal, charters, kind);
                         poolSurvivors.Add(created);
                     }
                     poolSurvivors = poolSurvivors.Take(pool.GuildCount).ToList();
@@ -336,7 +353,9 @@ public static class AutonomousCrewManager
                         continue;
                     if (targets.Length == 0)
                         throw new InvalidOperationException($"No surviving generated guild is available for obsolete guild '{sourceGuild.Name}'.");
-                    Guild targetGuild = GuildMgr.GetGuildByGuildID(targets[obsoleteOrdinal++ % targets.Length].GuildId) ??
+                    // RvR: an obsolete guild's keep claims and alliance pass only to a guild of its own realm.
+                    Guild targetGuild = GuildMgr.GetGuildByGuildID(AutonomousGuildSeeding.ObsoleteGuildTarget(
+                            world, sourceGuild.Realm, obsoleteOrdinal++, targetPlan)) ??
                         throw new InvalidOperationException($"Generated guild target for '{sourceGuild.Name}' no longer exists.");
                     var mapping = new AutonomousCrewMappingRecord
                     {
@@ -385,10 +404,11 @@ public static class AutonomousCrewManager
                     CompleteMapping(mapping, protectedGuildIds);
 
                 // Ordinals run per pool from its first ordinal (Camlann: 0, 1, 2, ... as before).
-                foreach ((Guild guild, int ordinal) in poolPlan.SelectMany(entry =>
-                             entry.Guilds.Select((guild, index) => (guild, entry.Pool.FirstOrdinal + index))))
+                foreach ((Guild guild, int ordinal, AutonomousGuildSeeding.GuildPool pool) in poolPlan.SelectMany(entry =>
+                             entry.Guilds.Select((guild, index) => (guild, entry.Pool.FirstOrdinal + index, entry.Pool))))
                 {
-                    AutonomousGuildCharterRecord charter = EnsureCharter(guild, ordinal, charters);
+                    AutonomousGuildCharterRecord charter = EnsureCharter(guild, ordinal, charters,
+                        AutonomousGuildSeeding.CharterFor(world, pool, ordinal, AutonomousBotGoalPolicy.Settings.Mix));
                     if (charter.Ordinal != ordinal)
                     {
                         charter.Ordinal = ordinal;
@@ -396,9 +416,15 @@ public static class AutonomousCrewManager
                         if (!GameServer.Database.SaveObject(charter))
                             throw new InvalidOperationException($"Could not persist generated guild order for {guild.GuildID}.");
                     }
+                    if (AutonomousGuildSeeding.SingleRealmGuilds(world))
+                        AdoptRealmCharter(guild, charter, pool, ordinal, world);
                     AutonomousGuildCharter kind = Enum.TryParse(charter.Charter, out AutonomousGuildCharter parsed) &&
                         Enum.IsDefined(parsed) ? parsed : AutonomousGuildCharter.Leveling;
-                    RenameManagedGuild(guild, charter, NameForOrdinal(ordinal, kind));
+                    string proposedName = AutonomousGuildSeeding.SingleRealmGuilds(world)
+                        ? AutonomousRealmGuildNames.Pick(pool.Realm, kind, name => NameUsedByAnotherGuild(name, guild)) ??
+                          NameForOrdinal(ordinal, kind)
+                        : NameForOrdinal(ordinal, kind);
+                    RenameManagedGuild(guild, charter, proposedName);
                 }
 
                 var identityChanges = new List<DataObject>();
@@ -439,6 +465,10 @@ public static class AutonomousCrewManager
         if (bot == null || record == null || guild == null)
             return false;
 
+        // RvR backstop: a bot never logs in as a member of another realm's guild.
+        if (guild.Realm != eRealm.None && !AutonomousGuildSeeding.MayJoin(WorldMode.Current, bot.Realm, guild.Realm))
+            return false;
+
         DbGuildRank rank = guild.GetRankByID(Math.Clamp(record.GuildRank, 0, 9)) ?? guild.GetRankByID(9);
         if (rank == null || !guild.AddBotMember(bot, rank))
             return false;
@@ -456,6 +486,10 @@ public static class AutonomousCrewManager
 
         if (inviter?.Guild == null || bot == null || !bot.IsAlive || bot.Guild != null ||
             !bot.IsAutonomousWorldBot || !AreLevelsCompatible(inviter.Level, bot.Level))
+            return false;
+        // RvR: a guild recruits only its own realm, staff invites included (the /guild command checks the
+        // inviter's realm first; this checks the guild's).
+        if (!AutonomousGuildSeeding.MayJoin(WorldMode.Current, bot.Realm, GuildRealm(inviter.Guild, inviter)))
             return false;
 
         DbGuildRank rank = inviter.Guild.GetRankByID(9);
@@ -618,18 +652,48 @@ public static class AutonomousCrewManager
         }
     }
 
+    /// <summary>The realm a guild recruits from: its own realm, else (an old realm-less guild) its inviter's.</summary>
+    public static eRealm GuildRealm(Guild guild, GameLiving inviter) =>
+        GuildRealm(guild?.Realm ?? eRealm.None, inviter?.Realm ?? eRealm.None);
+
+    public static eRealm GuildRealm(eRealm guildRealm, eRealm inviterRealm) =>
+        guildRealm != eRealm.None ? guildRealm : inviterRealm;
+
+    /// <summary>
+    /// RvR: a managed guild seeded before the realm names existed (R5a, global-ordinal charter, a Camlann-style
+    /// name) adopts its slot's charter from the per-realm plan and loses its old display name once, so the
+    /// rename below gives it a realm name. Its members keep the player types they already have. A guild that
+    /// already carries a realm name, or has a rename in progress, keeps its charter, so a later change of the
+    /// owner's mix never renames a guild.
+    /// </summary>
+    private static void AdoptRealmCharter(Guild guild, AutonomousGuildCharterRecord charter,
+        AutonomousGuildSeeding.GuildPool pool, int ordinal, WorldModelKind world)
+    {
+        string current = string.IsNullOrWhiteSpace(charter.DisplayName) ? guild.Name : charter.DisplayName;
+        if (!string.IsNullOrWhiteSpace(charter.PendingNewName) || AutonomousRealmGuildNames.IsRealmName(pool.Realm, current))
+            return;
+        string planned = AutonomousGuildSeeding.CharterFor(world, pool, ordinal, AutonomousBotGoalPolicy.Settings.Mix).ToString();
+        if (string.Equals(charter.Charter, planned, StringComparison.Ordinal) && string.IsNullOrEmpty(charter.DisplayName))
+            return;
+        charter.Charter = planned;
+        charter.DisplayName = string.Empty;
+        charter.Dirty = true;
+        if (!GameServer.Database.SaveObject(charter))
+            throw new InvalidOperationException($"Could not adopt the realm charter for generated guild {guild.GuildID}.");
+    }
+
     private static bool AreLevelsCompatible(int playerLevel, int botLevel) =>
         playerLevel >= 50 && botLevel >= 50 || Math.Abs(playerLevel - botLevel) <= 5;
 
     private static AutonomousGuildCharterRecord EnsureCharter(Guild guild, int ordinal,
-        Dictionary<string, AutonomousGuildCharterRecord> charters)
+        Dictionary<string, AutonomousGuildCharterRecord> charters, AutonomousGuildCharter kind)
     {
         if (charters.TryGetValue(guild.GuildID, out var existing)) return existing;
         var row = new AutonomousGuildCharterRecord
         {
             GuildId = guild.GuildID,
             IsManaged = true,
-            Charter = AutonomousBotIdentity.CharterForOrdinal(ordinal, AutonomousBotGoalPolicy.Settings.Mix).ToString(),
+            Charter = kind.ToString(),
             Ordinal = ordinal,
         };
         if (!GameServer.Database.AddObject(row))

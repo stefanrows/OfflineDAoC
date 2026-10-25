@@ -32,16 +32,38 @@ public static class AutonomousGuildGrudgePolicy
         bool victimStartedFight) =>
         !victimStartedFight && !killerGreyToVictim &&
         (killerIsHuman || victimLevel >= MinimumBotVictimLevel);
+
+    /// <summary>The prefix of a realm-wide grudge owner key in the RvR world ("realm:1" is Albion).</summary>
+    public const string RealmOwnerPrefix = "realm:";
+
+    /// <summary>
+    /// Who holds a grudge. Camlann: the victim's guild, as before (guilds are the fighting units). RvR world:
+    /// the victim's realm, so a killer of one Albion bot is a known enemy to every Albion bot. Null when there
+    /// is nobody to remember it (no guild in Camlann, no playable realm in RvR).
+    /// </summary>
+    public static string OwnerKey(WorldModelKind world, string guildId, eRealm realm)
+    {
+        if (world == WorldModelKind.Realm)
+            return realm is eRealm.Albion or eRealm.Midgard or eRealm.Hibernia
+                ? RealmOwnerPrefix + (int)realm
+                : null;
+        return string.IsNullOrWhiteSpace(guildId) ? null : guildId;
+    }
+
+    /// <summary>
+    /// How many killers one owner remembers: 16 per guild in Camlann; 48 per realm in the RvR world, where one
+    /// realm holds about as many bots as three to five Camlann guilds.
+    /// </summary>
+    public static int MaximumTargets(WorldModelKind world) => world == WorldModelKind.Realm ? 48 : 16;
 }
 
 /// <summary>
-/// Keeps recent killers in a guild-scoped, additive save table. Memories live
+/// Keeps recent killers in a guild-scoped (Camlann) or realm-scoped (RvR world), additive save table. Memories live
 /// in a cache that game threads update immediately; SQLite writes are batched
 /// on a timer thread so a death never waits on the database.
 /// </summary>
 public static class AutonomousGuildGrudgeMemory
 {
-    private const int MaximumTargetsPerGuild = 16;
     private const long PruneIntervalMilliseconds = 60_000;
     private const string CharacterTarget = "Character";
     private const string WorldBotTarget = "WorldBot";
@@ -74,8 +96,9 @@ public static class AutonomousGuildGrudgeMemory
         targetName = string.Empty;
         location = string.Empty;
         shouldAnnounce = false;
+        string ownerKey = OwnerKeyOf(victim);
         if (victim?.IsAutonomousWorldBot != true || victim.IsTemporaryGroupHelper ||
-            victim.PersistentRecord == null || victim.Guild == null || victim.Guild == Guild.DummyGuild ||
+            victim.PersistentRecord == null || ownerKey == null ||
             killer is not GameLiving killerLiving || PvpCombatant.AreAllied(victim, killerLiving) ||
             PvpCombatant.IsSafeArea(victim))
             return false;
@@ -96,8 +119,7 @@ public static class AutonomousGuildGrudgeMemory
             return false;
 
         nowUtc = nowUtc.ToUniversalTime();
-        string guildId = victim.Guild.GuildID;
-        GrudgeKey key = new(guildId, targetKind, targetKey);
+        GrudgeKey key = new(ownerKey, targetKind, targetKey);
         lock (WriteSync)
         {
             MemoryEntry existing = Memories.GetValueOrDefault(key);
@@ -108,7 +130,7 @@ public static class AutonomousGuildGrudgeMemory
             Memories[key] = entry;
             QueueWrite(key, entry);
             shouldAnnounce = announce;
-            TrimGuild(guildId);
+            TrimOwner(ownerKey);
         }
 
         PruneExpired(nowUtc);
@@ -117,7 +139,8 @@ public static class AutonomousGuildGrudgeMemory
 
     public static bool IsActiveTarget(GameBot hunter, GameLiving candidate, DateTime nowUtc)
     {
-        if (hunter?.IsAutonomousWorldBot != true || hunter.IsTemporaryGroupHelper || hunter.Guild == null ||
+        string ownerKey = OwnerKeyOf(hunter);
+        if (hunter?.IsAutonomousWorldBot != true || hunter.IsTemporaryGroupHelper || ownerKey == null ||
             candidate == null || !TryGetTargetKey(PvpCombatant.Resolve(candidate), out string kind, out string targetKey, out _))
             return false;
 
@@ -126,7 +149,7 @@ public static class AutonomousGuildGrudgeMemory
             return false;
         PruneIfDue(nowUtc);
 
-        GrudgeKey key = new(hunter.Guild.GuildID, kind, targetKey);
+        GrudgeKey key = new(ownerKey, kind, targetKey);
         if (!Memories.TryGetValue(key, out MemoryEntry entry) ||
             !AutonomousGuildGrudgePolicy.IsActive(entry.ExpiresUtc, nowUtc.ToUniversalTime()))
             return false;
@@ -139,8 +162,9 @@ public static class AutonomousGuildGrudgeMemory
     /// <summary>Returns online, reachable KOS targets for an existing RvR crew.</summary>
     public static GameLiving[] GetReachableTargets(GameBot hunter, ISet<ushort> reachableRegions, DateTime nowUtc)
     {
+        string ownerKey = OwnerKeyOf(hunter);
         if (hunter?.IsAutonomousWorldBot != true || hunter.IsTemporaryGroupHelper ||
-            hunter.Guild == null || reachableRegions == null || reachableRegions.Count == 0)
+            ownerKey == null || reachableRegions == null || reachableRegions.Count == 0)
             return [];
 
         EnsureLoaded();
@@ -149,11 +173,11 @@ public static class AutonomousGuildGrudgeMemory
         PruneIfDue(nowUtc);
 
         (GrudgeKey Key, MemoryEntry Entry)[] entries = Memories
-            .Where(pair => pair.Key.GuildId == hunter.Guild.GuildID &&
+            .Where(pair => pair.Key.GuildId == ownerKey &&
                 AutonomousGuildGrudgePolicy.IsActive(pair.Value.ExpiresUtc, nowUtc.ToUniversalTime()))
             .OrderByDescending(pair => pair.Value.LastSeenUtc)
             .Select(pair => (pair.Key, pair.Value))
-            .Take(MaximumTargetsPerGuild)
+            .Take(AutonomousGuildGrudgePolicy.MaximumTargets(WorldMode.Current))
             .ToArray();
         if (entries.Length == 0)
             return [];
@@ -403,12 +427,25 @@ public static class AutonomousGuildGrudgeMemory
         }
     }
 
-    private static void TrimGuild(string guildId)
+    /// <summary>
+    /// The grudge owner of a world bot: its guild in Camlann (never the dummy guild), its realm in the RvR world
+    /// (<see cref="AutonomousGuildGrudgePolicy.OwnerKey"/>). The save table's GuildId column holds this key.
+    /// </summary>
+    private static string OwnerKeyOf(GameBot bot)
+    {
+        if (bot == null)
+            return null;
+        Guild guild = bot.Guild == Guild.DummyGuild ? null : bot.Guild;
+        eRealm realm = bot.PersistentRecord != null ? (eRealm)bot.PersistentRecord.Realm : bot.Realm;
+        return AutonomousGuildGrudgePolicy.OwnerKey(WorldMode.Current, guild?.GuildID, realm);
+    }
+
+    private static void TrimOwner(string ownerKey)
     {
         KeyValuePair<GrudgeKey, MemoryEntry>[] excess = Memories
-            .Where(pair => pair.Key.GuildId == guildId)
+            .Where(pair => pair.Key.GuildId == ownerKey)
             .OrderByDescending(pair => pair.Value.LastSeenUtc)
-            .Skip(MaximumTargetsPerGuild)
+            .Skip(AutonomousGuildGrudgePolicy.MaximumTargets(WorldMode.Current))
             .ToArray();
         foreach ((GrudgeKey key, _) in excess)
         {

@@ -85,8 +85,14 @@ defaults in code, keep/relic start state from the reset.
   missing); active world shown in the status line; Gothwaite controls only in
   the PvP world; import guard accepts `Realm-1`. 1 session. **Wipe + first RvR
   boot on the owner's PC right after R5b.**
-- [~] **R4a Bot guilds + login per realm.** Implemented (worktree rvr-r4a, 31 tests: 120 realm guild names, balanced charter mix per realm, no cross-realm membership, realm login balancer `rvr_realm_active_target` 600, grudges per realm), review ACCEPT (12:20); two small follow-ups then merge. ~600 bots per realm in
-  single-realm guilds, realm login balance. 1 session.
+- [x] **R4a Bot guilds + login per realm.** (0.339.0; `docs/RVR_BOTS.md`)
+  RvR world: 120 realm guild names in 2003 style (8 per charter per realm),
+  the same charter mix in every realm (Leveling 5, RvR 4, Social 3, Hunting
+  2, Keep 1), no cross-realm membership on any path, legacy R5a guilds
+  renamed once; realm login balancer (`rvr_realm_active_target` 600, per-realm
+  ramp, lowest-load realm first, shortfall not filled by others); grudges per
+  realm (48, 3 h); companions unchanged. Open for R4b: revenge trips must be
+  capped and measured. 32 tests.
 - [ ] **R4b Realm armies.** Event layer armies per realm instead of per guild,
   muster at the realm's portal outpost, grudges/banter per realm. 2 sessions.
 - [ ] **R4c Upstream siege-flow port.** Retake, 108/170 march threshold, siege
@@ -176,3 +182,11 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
   realm; no guild keep mounts; bot armies pick open enemy temples (march
   logic stays R4b); Camlann unchanged.
 - 2026-10-25 12:15: R3b reviewed (ACCEPT, 2 lows fixed) and merged as 0.338.0.
+- 2026-10-25 (R4a agent): R4a in source on branch rvr-r4a, real-client check
+  pending: RvR bot guilds get realm names (8 per charter and realm) and the same
+  charter plan in every realm, R5a-era names are renamed once; recruitment,
+  alt trickle, guild mergers and login binding never cross realms; realm login
+  balancer keeps each realm near `rvr_realm_active_target` (600), a short realm
+  is not filled by the others; grudges keyed by realm, KOS call without "crew"
+  (RVR_BOTS.md). Camlann unchanged.
+- 2026-10-25 12:35: R4a reviewed (ACCEPT, 2 follow-ups) and merged as 0.339.0.

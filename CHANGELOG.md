@@ -12,6 +12,25 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.339.0] - 2026-10-25
+
+### Added
+- RvR mode, package R4a (`docs/RVR_BOTS.md`): world bots in a `Realm-1` world
+  belong to single-realm guilds with realm names (eight per guild type and
+  realm, in 2003 style), every realm gets the same mix of guild types, no
+  guild ever takes a bot of another realm, the online population is balanced
+  per realm (`rvr_realm_active_target`, default 600 each), and grudges are
+  held per realm. Unit tests UT_RvrBotGuildsAndLogin (32).
+
+### Changed
+- None for the Camlann world.
+
+### Fixed
+- None.
+
+### Removed
+- None.
+
 ## [0.338.0] - 2026-10-25
 
 ### Added

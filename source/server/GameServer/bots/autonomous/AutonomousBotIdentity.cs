@@ -24,10 +24,13 @@ public static class AutonomousBotIdentity
     public static AutonomousGuildCharter CharterForOrdinal(int ordinal) =>
         (AutonomousGuildCharter)(Math.Max(0, ordinal) % CharterWeights.Length);
 
-    public static AutonomousGuildCharter CharterForOrdinal(int ordinal, PlayerTypeMix mix)
-    {
-        if (mix == null) return CharterForOrdinal(ordinal);
-        int[] scores =
+    /// <summary>
+    /// How strongly the owner's player-type mix asks for each charter, in <see cref="AutonomousGuildCharter"/>
+    /// order. A null mix weighs every charter the same.
+    /// </summary>
+    public static int[] CharterScores(PlayerTypeMix mix) => mix == null
+        ? [1, 1, 1, 1, 1]
+        :
         [
             mix.Hunter + mix.Hybrid / 4,
             mix.Roamer + mix.Hybrid / 2,
@@ -35,6 +38,11 @@ public static class AutonomousBotIdentity
             mix.Leveler + mix.Hybrid / 4,
             mix.Casual + mix.Leveler / 4,
         ];
+
+    public static AutonomousGuildCharter CharterForOrdinal(int ordinal, PlayerTypeMix mix)
+    {
+        if (mix == null) return CharterForOrdinal(ordinal);
+        int[] scores = CharterScores(mix);
         int draw = (int)((uint)Math.Max(0, ordinal) * 37u % (uint)scores.Sum());
         for (int index = 0; index < scores.Length; index++)
         {
