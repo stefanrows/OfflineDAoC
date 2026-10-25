@@ -87,3 +87,6 @@ Total about 12 sessions. Order: R1a → R1b → R2 → R3a → R3b → R5a → R
 - 2026-10-25 02:00: usage limit reached mid-night. R1b in review, R2 and R5a
   implemented/running. Launcher ToA block restored (0.333.0). The hourly
   fallback job continues the package list after the reset.
+- 2026-10-25 09:35: the PC slept 01:13-09:32 (hibernate), the night produced only
+  R1a/0.333.0. Standby disabled on mains. Owner: continue the night plan now,
+  same authorisations (wipe after R5b without asking).
