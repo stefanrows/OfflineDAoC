@@ -250,6 +250,28 @@ defaults in code, keep/relic start state from the reset.
   fork's porters and frontier transport, realm-bound, serving only the own
   realm's frontier.
 
+### Live comparison with upstream 2026-10-26 evening (0.347.0, ~3 game hours at ~4x)
+
+Reference: upstream 0.37c log 2026-10-23/24 (14.4 h at 1x). Script and logs in
+the session scratchpad; numbers per game hour.
+
+- PvP deaths ~2,900/h (upstream ~450/h); sieges ~1/h (upstream 0.14/h);
+  41 % of RvR deaths are solo bots.
+- [x] **Warband formation as upstream** (0.348.0): owner chose "erst
+  Original, dann messen" over fixed 8-man setups. Measure again before any
+  composition rules (healer/speed) are designed; those would be new, upstream
+  has none.
+- [ ] **Defence musters gather 0 defenders** (`RVR_DEFENSE_MARCH mustered=0`
+  in both runs; code equals upstream, cause unknown).
+- [ ] **`AutonomousRvrSpeed` is fork-only and ungated in Realm-1** (77 of 261
+  groups without a speed class); check whether it changes pace or only logs.
+- [ ] **Siege crews in personal combat** (`RVR_SIEGE_GATE reason=personal-combat`
+  ~5,900 lines in 49 min).
+- Task mix 96 % RvR vs upstream 40 %: owner 2026-10-26 "stört mich erstmal
+  nicht"; realm raids cannot start while it stays (200 GroupPve bots needed).
+- Leader handover on death is upstream behaviour; owner keeps "sofort".
+- The 10-hour SQL stall overnight was the owner PC being off, not a bug.
+
 ### Open owner decision 2026-10-26: one bot layer instead of two parallel flows
 
 Owner 2026-10-26 10:50: "alles was offen ist - df usw haben wir aber im pvp

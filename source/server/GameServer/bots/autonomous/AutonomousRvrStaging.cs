@@ -194,7 +194,17 @@ public static class AutonomousRvrStaging
         objectiveKind == eAutonomousObjectiveKind.RvR;
 
     public static int RollWarbandSize(int maximumSize, double roll)
-        => CamlannPopulationTuning.RollWarbandSize(maximumSize, roll);
+        => RollWarbandSize(WorldMode.Current, maximumSize, roll);
+
+    // RvR world: upstream 0.38c rolls the warband size evenly from 1 to 8; Camlann keeps its scout/pair/crew bands.
+    public static int RollWarbandSize(WorldModelKind world, int maximumSize, double roll)
+    {
+        if (world != WorldModelKind.Realm)
+            return CamlannPopulationTuning.RollWarbandSize(maximumSize, roll);
+        int maximum = Math.Clamp(maximumSize, 1, 8);
+        double bounded = Math.Clamp(roll, 0d, Math.BitDecrement(1d));
+        return 1 + (int)(bounded * maximum);
+    }
 
     /// <summary>
     /// Spreads a warband deterministically across the closest visible enemies.

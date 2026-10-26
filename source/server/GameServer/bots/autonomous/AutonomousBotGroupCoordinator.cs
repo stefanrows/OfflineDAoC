@@ -355,8 +355,14 @@ public static partial class AutonomousBotGroupCoordinator
             ? Math.Max(0, rosterCount - MinimumSoloRvrReserve(rosterCount))
             : Math.Max(0, rosterCount);
 
-    public static int MinimumSoloRvrReserve(int rosterCount) =>
-        CamlannPopulationTuning.MinimumSoloRvrReserve(rosterCount);
+    public static int MinimumSoloRvrReserve(int rosterCount) => MinimumSoloRvrReserve(WorldMode.Current, rosterCount);
+
+    // RvR world: upstream 0.38c keeps 35 % of each realm's RvR roster solo; Camlann keeps its 25 % profile.
+    public static int MinimumSoloRvrReserve(WorldModelKind world, int rosterCount) => world != WorldModelKind.Realm
+        ? CamlannPopulationTuning.MinimumSoloRvrReserve(rosterCount)
+        : rosterCount < 4
+            ? Math.Max(0, rosterCount - 2)
+            : Math.Max(2, (int)Math.Ceiling(rosterCount * 0.35d));
 
     public static int AvailableGroupSlotsForObjective(eAutonomousObjectiveKind objectiveKind, int realmRosterCount, int realmGroupedCount) =>
         Math.Max(0, MaximumGroupedForObjective(objectiveKind, realmRosterCount) - realmGroupedCount);
@@ -1481,7 +1487,8 @@ public static partial class AutonomousBotGroupCoordinator
             : ref _nextGroupPveFormationTick;
         if (GameLoop.GameLoopTime < nextFormationTick)
             return;
-        nextFormationTick = GameLoop.GameLoopTime + MatchmakingIntervalMilliseconds;
+        bool realmRvr = objectiveKind == eAutonomousObjectiveKind.RvR && WorldMode.IsRvr;
+        nextFormationTick = GameLoop.GameLoopTime + (realmRvr ? RealmRvrFormationIntervalMilliseconds : MatchmakingIntervalMilliseconds);
 
         // One existing low-frequency pass expires whole groups, including a
         // warband whose own members are currently all on horses or in combat.
@@ -1507,6 +1514,11 @@ public static partial class AutonomousBotGroupCoordinator
             .Where(bot => !bot.IsTemporaryGroupHelper && !AutonomousGuildKeepDefense.IsRecalled(bot) &&
                           AutonomousObjectiveAssignments.Is(bot, objectiveKind))
             .ToArray();
+        if (realmRvr)
+        {
+            TryFormRealmRvrGroups(activeRoster);
+            return;
+        }
         int groupedCount = activeRoster.Count(bot => bot.Group != null);
         // Allocation has already capped the GroupPve cohort at its population
         // target. Applying the legacy 40% cap again here would reduce it to 16%

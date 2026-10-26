@@ -90,6 +90,26 @@ public sealed class UT_AutonomousRvrDirector
     }
 
     [Test]
+    public void RvrWorldFormsWarbandsAsUpstream()
+    {
+        Assert.Multiple(() =>
+        {
+            // Upstream 0.38c: size rolled evenly 1-8.
+            Assert.That(AutonomousRvrStaging.RollWarbandSize(WorldModelKind.Realm, 8, 0), Is.EqualTo(1));
+            Assert.That(AutonomousRvrStaging.RollWarbandSize(WorldModelKind.Realm, 8, .13), Is.EqualTo(2));
+            Assert.That(AutonomousRvrStaging.RollWarbandSize(WorldModelKind.Realm, 8, .5), Is.EqualTo(5));
+            Assert.That(AutonomousRvrStaging.RollWarbandSize(WorldModelKind.Realm, 8, .999999), Is.EqualTo(8));
+            Assert.That(AutonomousRvrStaging.RollWarbandSize(WorldModelKind.Realm, 3, .999999), Is.EqualTo(3));
+            // Camlann keeps its scout/pair bands.
+            Assert.That(AutonomousRvrStaging.RollWarbandSize(WorldModelKind.Camlann, 8, .5), Is.EqualTo(3));
+            // Upstream 0.38c: 35 % of each realm's RvR roster stays solo; Camlann 25 %.
+            Assert.That(AutonomousBotGroupCoordinator.MinimumSoloRvrReserve(WorldModelKind.Realm, 600), Is.EqualTo(210));
+            Assert.That(AutonomousBotGroupCoordinator.MinimumSoloRvrReserve(WorldModelKind.Realm, 3), Is.EqualTo(1));
+            Assert.That(AutonomousBotGroupCoordinator.MinimumSoloRvrReserve(WorldModelKind.Camlann, 600), Is.EqualTo(150));
+        });
+    }
+
+    [Test]
     public void WarbandTargetPressureSpreadsButStaysWithinTheClosestPartySizedSet()
     {
         int[] selections = Enumerable.Range(10, 8)

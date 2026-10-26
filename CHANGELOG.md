@@ -12,6 +12,17 @@ package, not this fork's version.
 
 ## [Unreleased]
 
+## [0.348.0] - 2026-10-26
+
+### Changed
+- Realm-1 world: RvR warbands form as in upstream 0.38c (owner 2026-10-26
+  "erst Original, dann messen"; implemented in source, live measurement
+  pending). The leader is the bot closest to its realm's border keep, the
+  size is rolled evenly from 1 to 8, members come from the leader's own
+  region and realm, and 35 % of each realm's RvR roster stays solo (was
+  Camlann's player-type sizes, a 25 % reserve over all realms, cross-region
+  pickup probes and field backfill). Camlann unchanged.
+
 ## [0.347.0] - 2026-10-26
 
 ### Added
